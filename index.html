@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <title>CarePoint | Integrated Hospital Management</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <a class="brand" href="#" aria-label="CarePoint home">
+      <span class="brand-symbol"><span></span><span></span><span></span><span></span></span>
+      <span class="brand-name">carepoint<small>HOSPITAL OS + DBMS</small></span>
+    </a>
+    <div class="nav-caption">HOSPITAL OPERATIONS</div>
+    <nav class="nav-group" aria-label="Hospital operations">
+      <button class="nav-item active" data-page="overview"><span class="nav-icon">◫</span><span>Overview</span></button>
+      <button class="nav-item" data-page="patients"><span class="nav-icon">♙</span><span>Patients</span><span class="nav-count" id="navPatientCount">3</span></button>
+      <button class="nav-item" data-page="doctors"><span class="nav-icon">⚕</span><span>Doctors</span></button>
+      <button class="nav-item" data-page="appointments"><span class="nav-icon">▦</span><span>Appointments</span></button>
+      <button class="nav-item" data-page="resources"><span class="nav-icon">▤</span><span>Beds & resources</span></button>
+    </nav>
+    <div class="nav-caption os-caption">OPERATING SYSTEM MODULE</div>
+    <nav class="nav-group" aria-label="Operating system modules">
+      <button class="nav-item" data-page="treatments"><span class="nav-icon">◷</span><span>Treatment processes</span></button>
+      <button class="nav-item" data-page="scheduler"><span class="nav-icon">▥</span><span>Treatment scheduling</span></button>
+      <button class="nav-item" data-page="allocation"><span class="nav-icon">⇄</span><span>Banker’s algorithm</span></button>
+      <button class="nav-item" data-page="history"><span class="nav-icon">↻</span><span>Run history</span></button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="connection-dot"></div>
+      <div><b>Prototype mode</b><small>Local sample data</small></div>
+      <span class="footer-pill">DEV</span>
+    </div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <button class="mobile-menu" id="mobileMenu" aria-label="Open navigation">☰</button>
+      <div class="breadcrumbs"><span>Workspace</span><span class="slash">/</span><b id="crumb">Overview</b></div>
+      <div class="topbar-right">
+        <span class="environment"><i></i> FRONTEND PREVIEW</span>
+        <button class="round-icon" id="helpButton" title="Integration status">?</button>
+        <div class="user-chip"><div class="user-avatar">AS</div><div><b>Anand Singh</b><small>Frontend & integration</small></div><span class="chevron">⌄</span></div>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <div class="page-header">
+        <div>
+          <div class="eyebrow" id="eyebrow">HOSPITAL COMMAND CENTRE <span class="eyebrow-line"></span> <span id="todayLabel"></span></div>
+          <h1 id="pageTitle">Good evening, Anand<span class="title-dot">.</span></h1>
+          <p id="pageSubtitle">A clear view of patient care, hospital resources and OS scheduling.</p>
+        </div>
+        <div class="header-actions">
+          <button class="button button-light" id="refreshButton">↻ <span>Refresh view</span></button>
+          <button class="button button-primary" id="primaryAction">＋ <span>Register patient</span></button>
+        </div>
+      </div>
+
+      <div class="notice" id="prototypeNotice"><span class="notice-icon">i</span><div><b>Preview environment</b><span>Sample records are shown in this browser only. No data is being written to MySQL and OS results are not yet connected to Vansh’s Java module.</span></div><button id="dismissNotice" aria-label="Dismiss notice">×</button></div>
+
+      <section class="page-view" id="overviewView">
+        <div class="metric-grid">
+          <article class="metric-card"><div class="metric-head"><span>Registered patients</span><span class="metric-icon cyan">♙</span></div><div class="metric-number" id="metricPatients">3</div><div class="metric-foot"><span class="tiny-dot cyan-dot"></span><span>From <code>patients</code></span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>Appointments</span><span class="metric-icon violet">▦</span></div><div class="metric-number" id="metricAppointments">3</div><div class="metric-foot"><span class="tiny-dot violet-dot"></span><span>From <code>appointments</code></span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>Available beds</span><span class="metric-icon green">▤</span></div><div class="metric-number" id="metricBeds">1 <small>/ 3</small></div><div class="metric-foot"><span class="tiny-dot green-dot"></span><span id="bedFoot">1 currently available</span></div></article>
+          <article class="metric-card"><div class="metric-head"><span>Treatment queue</span><span class="metric-icon amber">◷</span></div><div class="metric-number" id="metricQueue">4</div><div class="metric-foot"><span class="tiny-dot amber-dot"></span><span>From <code>treatment_processes</code></span></div></article>
+        </div>
+
+        <div class="overview-grid">
+          <article class="panel panel-scheduling">
+            <div class="panel-title-row"><div><div class="section-kicker">OPERATING SYSTEM</div><h2>Scheduling at a glance</h2><p>Preview of the most recent scheduling run</p></div><button class="link-button" data-goto="scheduler">Open scheduler ↗</button></div>
+            <div class="scheduler-summary">
+              <div><span>Selected algorithm</span><b id="overviewAlgorithm">Priority</b></div>
+              <div><span>Processes queued</span><b id="overviewProcesses">4</b></div>
+              <div><span>Average waiting time</span><b id="overviewWait">— <small>units</small></b></div>
+            </div>
+            <div class="mini-gantt" id="overviewGantt" aria-label="Illustrative scheduling timeline">
+              <div class="gantt-labels"><span>Process</span><span>Execution timeline <small>(illustrative)</small></span></div>
+              <div class="gantt-row"><span class="process-label">P-101</span><div class="gantt-track"><i class="gantt-segment seg-blue" style="left:0%;width:24%">P1</i><i class="gantt-segment seg-lilac" style="left:25%;width:25%">P2</i></div></div>
+              <div class="gantt-row"><span class="process-label">P-102</span><div class="gantt-track"><i class="gantt-segment seg-green" style="left:25%;width:24%">P2</i><i class="gantt-segment seg-blue" style="left:51%;width:34%">P3</i></div></div>
+              <div class="gantt-row"><span class="process-label">P-103</span><div class="gantt-track"><i class="gantt-segment seg-amber" style="left:51%;width:21%">P3</i><i class="gantt-segment seg-lilac" style="left:74%;width:23%">P4</i></div></div>
+              <div class="gantt-ticks"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25</span></div>
+            </div>
+            <div class="panel-footnote"><span class="tiny-dot amber-dot"></span>Illustrative only — the real Gantt chart will render from <code>scheduling_results</code> after API integration.</div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-title-row"><div><div class="section-kicker">DBMS</div><h2>Resource status</h2><p>Current database snapshot</p></div><button class="link-button" data-goto="resources">View all ↗</button></div>
+            <div class="resource-summary" id="overviewResources"></div>
+            <div class="safety-preview"><div class="safety-mark">✓</div><div><b>Safety check workspace</b><span>Allocation details will be checked by Banker’s Algorithm.</span></div><button class="arrow-button" data-goto="allocation">↗</button></div>
+          </article>
+        </div>
+
+        <article class="panel table-panel">
+          <div class="panel-title-row"><div><div class="section-kicker">DBMS · APPOINTMENTS</div><h2>Recent appointments</h2><p>Joined patient and doctor records</p></div><button class="link-button" data-goto="appointments">All appointments ↗</button></div>
+          <div class="table-toolbar"><div class="search-wrap"><span>⌕</span><input id="overviewSearch" placeholder="Search patient or doctor" aria-label="Search appointments"></div><span class="table-meta">Sample records <span class="tiny-dot cyan-dot"></span></span></div>
+          <div class="table-scroll"><table><thead><tr><th>APPOINTMENT</th><th>PATIENT</th><th>DOCTOR</th><th>DATE & TIME</th><th>STATUS</th></tr></thead><tbody id="overviewAppointments"></tbody></table></div>
+        </article>
+      </section>
+
+      <section class="page-view hidden" id="moduleView">
+        <div id="moduleContent"></div>
+      </section>
+      <footer class="workspace-footer"><span>CarePoint <b>·</b> Integrated Hospital Management System</span><span>Team Tech Cure <b>·</b> OS + DBMS PBL</span></footer>
+    </section>
+  </main>
+</div>
+
+<dialog class="modal" id="recordDialog">
+  <form id="recordForm">
+    <div class="modal-head"><div><div class="section-kicker" id="modalKicker">NEW RECORD</div><h2 id="modalTitle">Register patient</h2><p id="modalSubtitle">Add a patient record to the local preview.</p></div><button type="button" class="modal-close" id="closeModal" aria-label="Close">×</button></div>
+    <div id="modalFields" class="modal-fields"></div>
+    <div class="modal-foot"><span class="form-hint">Local preview only · not saved to MySQL</span><div><button type="button" class="button button-light" id="cancelModal">Cancel</button><button type="submit" class="button button-primary" id="saveModal">Add record</button></div></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<script src="app.js"></script>
+</body>
+</html>
