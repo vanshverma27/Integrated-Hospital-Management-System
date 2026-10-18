@@ -61,7 +61,7 @@ WHERE sr.run_id = 1
 ORDER BY sr.process_order;
 
 -- =====================================================
--- BANKER'S ALGORITHM: RESOURCE ALLOCATION TABLE
+-- BANKER'S ALGORITHM: RESOURCE ALLOCATION TABLE.
 -- =====================================================
 
 CREATE TABLE IF NOT EXISTS resource_allocations (
