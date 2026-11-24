@@ -1,0 +1,36 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Launch Hospital Server (Web UI + API)",
+      "request": "launch",
+      "mainClass": "HospitalServer",
+      "classPaths": [
+        "${workspaceFolder}/lib/*",
+        "${workspaceFolder}"
+      ]
+    },
+    {
+      "type": "java",
+      "name": "Launch Hospital OS Module (CLI Mode)",
+      "request": "launch",
+      "mainClass": "HospitalOSModule",
+      "classPaths": [
+        "${workspaceFolder}/lib/*",
+        "${workspaceFolder}"
+      ],
+      "console": "integratedTerminal"
+    },
+    {
+      "type": "java",
+      "name": "Run Algorithm Verification Tests",
+      "request": "launch",
+      "mainClass": "HospitalTest",
+      "classPaths": [
+        "${workspaceFolder}/lib/*",
+        "${workspaceFolder}"
+      ]
+    }
+  ]
+}

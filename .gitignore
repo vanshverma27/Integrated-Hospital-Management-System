@@ -1,0 +1,8 @@
+# Java compiled artifacts
+*.class
+
+# Environment and sensitive properties
+*.env
+*.properties
+.DS_Store
+Thumbs.db

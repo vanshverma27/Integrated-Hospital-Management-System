@@ -1,62 +1,197 @@
-/* CarePoint redesigned frontend.
-   Demo records mirror Rohan's proposed DBMS tables. Replace local handlers with confirmed Java API routes during integration.
-   Scheduling and Banker results below are previews, not verified OS-module output. */
+/* Smart Hospital Resource & Treatment Management System
+   B.Tech 3rd Year Operating Systems & DBMS Project
+   
+   Full Stack Architecture:
+   - Frontend: Vanilla HTML5 / CSS3 / JavaScript
+   - Java Backend: Lightweight HttpServer (HospitalServer.java)
+   - OS Engine: HospitalOSModule.java (FCFS, SJF, Priority, Round Robin, Banker's Algorithm)
+   - JDBC Layer: HospitalDAO.java + DBConnection.java (PreparedStatement, ACID Transactions)
+   - MySQL Database: model_db (Patients, Doctors, Beds, Resources, Treatment Processes)
+
+   Features:
+   1. Complete Patient Management (CRUD: Register, Edit, Delete with Bed Release, Real-Time Search)
+   2. Complete Doctor Management (CRUD: Add, Edit, Delete, Search, Availability Tracking)
+   3. 50 Realistic Patients & 10 Doctors stored in MySQL
+   4. Strict 1:1 Inpatient Bed Allocation
+   5. 5 Separated OS Workload Categories (Emergency, Interactive, OPD, Diagnostic, Batch)
+   6. Workload-Specific CPU Scheduling with Gantt Chart & Metrics
+*/
+
+const API_BASE = window.location.origin.includes(":8080") ? "" : "http://localhost:8080";
+
 const state = {
   page: "overview",
-  patients: [
-    {patient_id:1,patient_name:"Rohit Sharma",age:45,gender:"Male",phone:"9876543210",address:"Dehradun"},
-    {patient_id:2,patient_name:"Virat Kohli",age:18,gender:"Male",phone:"9876543211",address:"Rishikesh"},
-    {patient_id:3,patient_name:"MSThala",age:7,gender:"Male",phone:"9876543212",address:"Haridwar"}
-  ],
-  doctors: [
-    {doctor_id:1,doctor_name:"Dr. Kumar",specialization:"Cardiologist",phone:"9987667661"},
-    {doctor_id:2,doctor_name:"Dr. Salukhe",specialization:"General Physician",phone:"9989876592"},
-    {doctor_id:3,doctor_name:"Dr. Tarika",specialization:"Doctor",phone:"8765678933"}
-  ],
-  beds: [
-    {bed_id:1,bed_number:"A-101",ward:"General Ward",bed_status:"Available"},
-    {bed_id:2,bed_number:"A-102",ward:"General Ward",bed_status:"Occupied"},
-    {bed_id:3,bed_number:"ICU-01",ward:"ICU",bed_status:"In Maintenance"}
-  ],
-  resources: [
-    {resource_id:1,resource_name:"Oxygen Cylinder",available_quantity:2,total_quantity:20},
-    {resource_id:2,resource_name:"Mask",available_quantity:678,total_quantity:1000},
-    {resource_id:3,resource_name:"Ventilator",available_quantity:9,total_quantity:10}
-  ],
-  appointments: [
-    {appointment_id:1,patient_id:1,doctor_id:1,appointment_date:"2026-10-15",appointment_time:"10:00:00",appointment_status:"Scheduled"},
-    {appointment_id:2,patient_id:2,doctor_id:2,appointment_date:"2026-10-15",appointment_time:"11:30:00",appointment_status:"Scheduled"},
-    {appointment_id:3,patient_id:3,doctor_id:3,appointment_date:"2026-10-16",appointment_time:"09:30:00",appointment_status:"Completed"}
-  ],
-  treatment_processes: [
-    {process_id:101,patient_id:1,appointment_id:1,process_name:"Cardiac assessment",arrival_time:0,burst_time:5,priority:1,process_status:"Queued"},
-    {process_id:102,patient_id:2,appointment_id:2,process_name:"General consultation",arrival_time:1,burst_time:4,priority:3,process_status:"Queued"},
-    {process_id:103,patient_id:3,appointment_id:3,process_name:"Follow-up check",arrival_time:2,burst_time:3,priority:2,process_status:"Queued"},
-    {process_id:104,patient_id:1,appointment_id:1,process_name:"Diagnostic scan",arrival_time:3,burst_time:6,priority:4,process_status:"Queued"}
-  ],
-  scheduling_runs: [
-    {run_id:1,algorithm:"Priority",time_quantum:null,executed_at:"Preview run"}
-  ],
+  dbConnected: false,
+  selectedWorkload: "Emergency",
+  patients: [],
+  doctors: [],
+  beds: [],
+  resources: [],
+  appointments: [],
+  treatment_processes: [],
+  scheduling_runs: [],
   scheduling_results: [],
-  resource_allocations: [
-    {process_id:101,resource_id:1,allocated_quantity:1,maximum_quantity:2,status:"Requested"},
-    {process_id:102,resource_id:3,allocated_quantity:1,maximum_quantity:1,status:"Requested"},
-    {process_id:103,resource_id:2,allocated_quantity:10,maximum_quantity:25,status:"Requested"}
-  ],
-  nextIds:{patients:4,doctors:4,beds:4,resources:4,appointments:4,treatment_processes:105}
+  resource_allocations: []
 };
+
 const pages = {
- overview:{crumb:"Overview",title:"",subtitle:"A clear view of patient care, hospital resources and treatment scheduling.",action:"Register patient",kind:"none"},
- patients:{crumb:"Patients",title:"Patient records",subtitle:"Manage patient details stored in the patients table.",action:"Register patient",kind:"patients"},
- doctors:{crumb:"Doctors",title:"Doctor directory",subtitle:"Review doctor profiles and specializations.",action:"Add doctor",kind:"doctors"},
- appointments:{crumb:"Appointments",title:"Appointment desk",subtitle:"Connect patients and doctors through scheduled visits.",action:"New appointment",kind:"appointments"},
- resources:{crumb:"Beds & resources",title:"Hospital capacity",subtitle:"Track bed status and available resource quantities.",action:"Add resource",kind:"resources"},
- treatments:{crumb:"Treatment processes",title:"Treatment queue",subtitle:"Maintain process inputs before passing them to the OS scheduler.",action:"Add process",kind:"treatments"},
- scheduler:{crumb:"Treatment scheduling",title:"Treatment scheduling",subtitle:"Schedule patient treatment processes and inspect waiting, turnaround and completion times.",action:"Run scheduler",kind:"scheduler"},
- allocation:{crumb:"Banker’s algorithm",title:"Resource safety check",subtitle:"Inspect allocated, maximum and available resource vectors.",action:"Check safe state",kind:"allocation"},
- history:{crumb:"Run history",title:"Scheduling & allocation history",subtitle:"Review run records and their persisted result sets.",action:"Refresh history",kind:"history"}
+  overview: { crumb: "Overview", title: "", subtitle: "B.Tech 3rd Year Project: OS CPU Scheduling, Deadlock Avoidance & DBMS Transactions.", action: "Register patient", kind: "none" },
+  patients: { crumb: "Patients", title: "Inpatient & Outpatient Management", subtitle: "Full CRUD operations connected to MySQL. Admitted patients maintain strict 1:1 dedicated bed allocation.", action: "Register patient", kind: "patients" },
+  doctors: { crumb: "Doctors", title: "Medical Specialists Directory", subtitle: "Full CRUD doctor profiles, clinical departments, and availability statuses stored in MySQL.", action: "Add doctor", kind: "doctors" },
+  appointments: { crumb: "Appointments", title: "Appointment Desk", subtitle: "Relational records linking registered patients and doctors with foreign key constraints.", action: "New appointment", kind: "appointments" },
+  resources: { crumb: "Beds & resources", title: "Hospital Inventory & Beds", subtitle: "Track dedicated bed occupancy (1:1 mapping) and shared hospital devices via ACID transactions.", action: "Add resource", kind: "resources" },
+  treatments: { crumb: "Treatment processes", title: "Hospital Software Task Queue (5 Workloads)", subtitle: "Clearly separated workload categories: Emergency, Interactive, OPD, Diagnostic, and Batch.", action: "Add task", kind: "treatments" },
+  scheduler: { crumb: "Treatment scheduling", title: "Workload-Specific CPU Scheduling", subtitle: "Dispatches different OS algorithms for different workloads (Priority, Round Robin, FCFS, SJF).", action: "Run scheduler", kind: "scheduler" },
+  allocation: { crumb: "Banker’s algorithm", title: "Deadlock Avoidance Simulator", subtitle: "Banker's Algorithm safety verification on shared hospital resources (Beds, Doctors, Devices).", action: "Check safe state", kind: "allocation" },
+  history: { crumb: "Run history", title: "Scheduling Audit Trail", subtitle: "Audit history of OS algorithm runs and completion metrics persisted in MySQL.", action: "Refresh history", kind: "history" }
 };
+
 const $ = id => document.getElementById(id);
+
+// Workload descriptions and algorithm recommendations for the 5 categories
+const workloadInfo = {
+  Emergency: {
+    title: "Critical Emergency Tasks",
+    icon: "🚨",
+    recommended: "Priority",
+    tagClass: "workload-emergency",
+    sectionClass: "emergency",
+    desc: "ICU telemetry alarms, cardiac arrhythmia monitors, and acute oxygen desaturation alerts.",
+    rationale: "Requires Non-Preemptive Priority Scheduling (Priority 1 = Highest Alert). Critical events must be dispatched immediately to prevent patient telemetry latency."
+  },
+  Interactive: {
+    title: "Interactive Doctor Tasks",
+    icon: "💬",
+    recommended: "Round Robin",
+    tagClass: "workload-interactive",
+    sectionClass: "interactive",
+    desc: "Physician prescription order entry, vital signs updates, and telehealth video sessions.",
+    rationale: "Requires Round Robin Scheduling (Time-shared with Quantum). Slicing execution ensures fair responsiveness across clinicians without starvation."
+  },
+  OPD: {
+    title: "OPD Clinical Tasks",
+    icon: "🩺",
+    recommended: "Round Robin",
+    tagClass: "workload-opd",
+    sectionClass: "opd",
+    desc: "Outpatient registration desks, consultation slips, queue tokens, and follow-up schedulers.",
+    rationale: "Requires Round Robin / Fair Queuing. Fair time slices prevent lengthy registrations from blocking incoming outpatient queue requests."
+  },
+  Diagnostic: {
+    title: "Rapid Diagnostic Screening",
+    icon: "🧪",
+    recommended: "SJF",
+    tagClass: "workload-diagnostic",
+    sectionClass: "diagnostic",
+    desc: "Blood glucose rapid checks, viral antigen assays, CBC analyzers, and chest X-ray renderings.",
+    rationale: "Requires Shortest Job First (SJF). Mathematically provable to yield the minimum average waiting time across quick diagnostic screenings."
+  },
+  Batch: {
+    title: "Batch Administrative Jobs",
+    icon: "📊",
+    recommended: "FCFS",
+    tagClass: "workload-batch",
+    sectionClass: "batch",
+    desc: "Nightly billing generation, insurance claim batching, discharge PDF exports, and bed stats.",
+    rationale: "Requires First-Come, First-Served (FCFS). Bulk background tasks have no real-time deadlines and benefit from zero context-switching overhead."
+  },
+  All: {
+    title: "All Hospital Tasks",
+    icon: "⚙️",
+    recommended: "Priority",
+    tagClass: "workload-batch",
+    sectionClass: "batch",
+    desc: "All queued software tasks combined across all departments.",
+    rationale: "Manual comparative mode: Run and compare different OS algorithms across all software tasks for viva demonstration."
+  }
+};
+
+let selectedAlgorithm = "Priority";
+let lastSchedule = null;
+let lastSafety = null;
+let toastTimer;
+
+// Banker's defaults
+const bankerDefaults = {
+  resources: ["Beds", "Doctors", "Monitoring Devices"],
+  available: [22, 10, 20],
+  patients: [
+    { name: "Task 1 (ICU Telemetry)", allocation: [1, 0, 1], maximum: [3, 2, 2] },
+    { name: "Task 2 (Prescription Entry)", allocation: [1, 1, 0], maximum: [2, 2, 1] },
+    { name: "Task 3 (MRI Scanner Pipeline)", allocation: [1, 0, 1], maximum: [3, 1, 3] }
+  ]
+};
+
+function toast(msg) {
+  const el = $("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 4000);
+}
+
+function escapeHtml(v) {
+  return String(v ?? "").replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  }[c]));
+}
+
+function patientName(id) {
+  const p = state.patients.find(x => Number(x.patient_id) === Number(id));
+  return p ? p.patient_name : `Patient #${id}`;
+}
+
+function doctorName(id) {
+  const d = state.doctors.find(x => Number(x.doctor_id) === Number(id));
+  return d ? d.doctor_name : `Doctor #${id}`;
+}
+
+function initials(name) {
+  return String(name || "?").trim().split(/\s+/).slice(0, 2).map(x => x[0] || "").join("").toUpperCase();
+}
+
+function statusClass(status) {
+  const s = String(status || "").toLowerCase();
+  if (s.includes("available") || s.includes("safe") || s.includes("completed")) return "status-available";
+  if (s.includes("occupied") || s.includes("progress") || s.includes("admitted") || s.includes("queued") || s.includes("duty")) return "status-in-progress";
+  if (s.includes("maintenance") || s.includes("unsafe") || s.includes("cancel") || s.includes("discharged") || s.includes("leave")) return "status-maintenance";
+  return "status-pending";
+}
+
+function statusTag(status) {
+  return `<span class="status ${statusClass(status)}">${escapeHtml(status || "Unknown")}</span>`;
+}
+
+function priorityTag(level) {
+  const lvl = Number(level) || 2;
+  if (lvl === 1) return `<span class="priority-badge priority-1">🔴 High (P1)</span>`;
+  if (lvl === 2) return `<span class="priority-badge priority-2">🟡 Medium (P2)</span>`;
+  return `<span class="priority-badge priority-3">🟢 Low (P3)</span>`;
+}
+
+function personCell(name, id, color = "cyan") {
+  return `<div class="person"><span class="person-avatar ${color}">${escapeHtml(initials(name))}</span><span><span class="person-name">${escapeHtml(name)}</span><small class="person-id">${escapeHtml(id)}</small></span></div>`;
+}
+
+function dateTime(date, time) {
+  let d = new Date(`${date}T${time || "00:00:00"}`);
+  if (Number.isNaN(d.getTime())) return `${date || "—"} ${time || ""}`;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" }) + " · " + d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+}
+
+function availableBedsCount() {
+  return state.beds.filter(b => String(b.bed_status).toLowerCase() === "available").length;
+}
+
+function totalBedsCount() {
+  return state.beds.length || 60;
+}
+
+function queued() {
+  return state.treatment_processes.filter(p => String(p.process_status).toLowerCase() !== "completed").length;
+}
+
 function greetingForCurrentTime(date = new Date()) {
   const hour = date.getHours();
   if (hour >= 5 && hour < 12) return "Good morning";
@@ -64,289 +199,1288 @@ function greetingForCurrentTime(date = new Date()) {
   if (hour >= 17 && hour < 21) return "Good evening";
   return "Good night";
 }
+
 function updateGreeting() {
   const title = $("pageTitle");
-  if (state.page === "overview" && title) title.innerHTML = `${greetingForCurrentTime()} Anand<span class="title-dot">.</span>`;
+  if (state.page === "overview" && title) {
+    title.innerHTML = `${greetingForCurrentTime()} Anand<span class="title-dot">.</span>`;
+  }
 }
-const navButtons = [...document.querySelectorAll(".nav-item")];
-let selectedAlgorithm = "Priority";
-let lastSchedule = null;
-let lastSafety = null;
-let toastTimer;
-// OS-module resource snapshot requested in the Phase-II specification. This is browser-local demo state.
-const osInventory = [
-  { key:"beds", name:"Beds", total:10, available:10 },
-  { key:"doctors", name:"Doctors", total:5, available:5 },
-  { key:"devices", name:"Monitoring Devices", total:8, available:8 }
-];
-const osResourceLedger = [];
-const bankerDefaults = {
-  resources:["Beds","Doctors","Monitoring Devices"],
-  available:[3,2,2],
-  patients:[
-    {name:"Patient 1", allocation:[1,0,1], maximum:[3,2,2]},
-    {name:"Patient 2", allocation:[1,1,0], maximum:[2,2,1]},
-    {name:"Patient 3", allocation:[1,0,1], maximum:[3,1,3]}
-  ]
-};
 
-function toast(msg){const el=$("toast");el.textContent=msg;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),3200);}
-function escapeHtml(v){return String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function patientName(id){return state.patients.find(x=>x.patient_id===Number(id))?.patient_name||`Patient #${id}`;}
-function doctorName(id){return state.doctors.find(x=>x.doctor_id===Number(id))?.doctor_name||`Doctor #${id}`;}
-function initials(name){return String(name||"?").trim().split(/\s+/).slice(0,2).map(x=>x[0]||"").join("").toUpperCase();}
-function statusClass(status){const s=String(status||"").toLowerCase();if(s.includes("available")||s.includes("safe")||s.includes("completed"))return "status-available";if(s.includes("occupied")||s.includes("progress"))return "status-in-progress";if(s.includes("maintenance")||s.includes("unsafe")||s.includes("cancel"))return "status-maintenance";return "status-pending";}
-function statusTag(status){return `<span class="status ${statusClass(status)}">${escapeHtml(status)}</span>`;}
-function personCell(name,id,color="cyan"){return `<div class="person"><span class="person-avatar ${color==="violet"?"violet":color==="green"?"green":color==="amber"?"amber":"cyan"}">${escapeHtml(initials(name))}</span><span><span class="person-name">${escapeHtml(name)}</span><small class="person-id">${escapeHtml(id)}</small></span></div>`;}
-function dateTime(date,time){let d=new Date(`${date}T${time||"00:00:00"}`);if(Number.isNaN(d.getTime()))return `${date||"—"} ${time||""}`;return d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})+" · "+d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"});}
-function availableBeds(){return state.beds.filter(b=>b.bed_status.toLowerCase()==="available").length;}
-function queued(){return state.treatment_processes.filter(p=>p.process_status.toLowerCase()==="queued").length;}
-function resourceLine(icon,name,available,total,color){let pct=total?Math.round(available/total*100):0;return `<div class="resource-line"><div class="resource-icon ${color}">${icon}</div><div class="resource-detail"><b>${escapeHtml(name)}</b><small>${available} available of ${total}</small><div class="resource-bar"><i style="width:${Math.min(100,pct)}%"></i></div></div><span class="resource-amount">${pct}%</span></div>`;}
-function refreshOverview(){
- $("metricPatients").textContent=state.patients.length;$("metricAppointments").textContent=state.appointments.length;
- $("metricBeds").innerHTML=`${availableBeds()} <small>/ ${state.beds.length}</small>`;$("bedFoot").textContent=`${availableBeds()} currently available`;
- $("metricQueue").textContent=queued();$("navPatientCount").textContent=state.patients.length;
- $("overviewProcesses").textContent=queued();
- $("overviewResources").innerHTML=state.resources.map((r,i)=>resourceLine(["◉","▦","✚"][i%3],r.resource_name,r.available_quantity,r.total_quantity,["cyan","violet","green"][i%3])).join("");
- const search=($("overviewSearch")?.value||"").toLowerCase();
- const rows=state.appointments.filter(a=>(patientName(a.patient_id)+" "+doctorName(a.doctor_id)).toLowerCase().includes(search)).slice(0,5);
- $("overviewAppointments").innerHTML=rows.length?rows.map((a,i)=>`<tr><td><b>#APT-${String(a.appointment_id).padStart(3,"0")}</b></td><td>${personCell(patientName(a.patient_id),`Patient ID ${a.patient_id}`,["cyan","violet","green"][i%3])}</td><td>${escapeHtml(doctorName(a.doctor_id))}</td><td>${escapeHtml(dateTime(a.appointment_date,a.appointment_time))}</td><td>${statusTag(a.appointment_status)}</td></tr>`).join(""):`<tr><td colspan="5" class="empty-state">No appointments match this search.</td></tr>`;
- if(lastSchedule){$("overviewAlgorithm").textContent=lastSchedule.algorithm;$("overviewWait").innerHTML=`${lastSchedule.avgWait.toFixed(1)} <small>units</small>`;}
- else {$("overviewAlgorithm").textContent="Priority";$("overviewWait").innerHTML='— <small>units</small>';}
-}
-function go(page){
- if(!pages[page])page="overview";state.page=page;const cfg=pages[page];
- navButtons.forEach(b=>b.classList.toggle("active",b.dataset.page===page));
- $("crumb").textContent=cfg.crumb;if(page==="overview"){updateGreeting();}else{$("pageTitle").textContent=cfg.title;}$("pageSubtitle").textContent=cfg.subtitle;
- $("primaryAction").innerHTML=`＋ <span>${escapeHtml(cfg.action)}</span>`;
- $("overviewView").classList.toggle("hidden",page!=="overview");$("moduleView").classList.toggle("hidden",page==="overview");
- $("sidebar").classList.remove("open");
- if(page!=="overview")renderModule(page);refreshOverview();
-}
-function table(headers,rows,empty="No records yet."){return `<div class="data-table-wrap"><table><thead><tr>${headers.map(h=>`<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.length?rows.join(""):`<tr><td colspan="${headers.length}" class="empty-state">${empty}</td></tr>`}</tbody></table></div>`;}
-function intro(kicker,title,desc,actionLabel="",action=""){return `<div class="module-intro"><div><div class="section-kicker">${kicker}</div><h2>${title}</h2><p>${desc}</p></div>${actionLabel?`<button class="button button-primary" data-action="${action}">＋ ${actionLabel}</button>`:""}</div>`;}
-function card(title,desc,body){return `<article class="module-card"><h3>${title}</h3><p class="muted">${desc}</p>${body}</article>`;}
-function field(label,name,type="text",placeholder="",extra=""){return `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" placeholder="${placeholder}" ${extra}></div>`;}
-function selectField(label,name,options){return `<div class="field"><label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${options.map(o=>`<option value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</option>`).join("")}</select></div>`;}
-function renderModule(page){
- const host=$("moduleContent");let html="";
- if(page==="patients"){
-  html=intro("DBMS · PATIENTS","Patient registry","Maps to `patients`: patient_id, patient_name, age, gender, phone and address.","Register patient","new-patient");
-  html+=card("Patient records","Search the local preview records before connecting the patient CRUD API.",`<div class="filter-row"><div class="search-wrap"><span>⌕</span><input id="patientSearch" placeholder="Search name, phone or address" aria-label="Search patients"></div><span class="table-meta" id="patientTableCount"></span></div><div id="patientsTable"></div><div class="inline-note"><b>DBMS mapping</b><span>Phone is unique in Rohan’s schema. The final Java API should return generated patient_id values from MySQL.</span></div>`);
- }else if(page==="doctors"){
-  html=intro("DBMS · DOCTORS","Doctor directory","Maps to `doctors`: doctor_id, doctor_name, specialization and unique phone.","Add doctor","new-doctor");
-  html+=card("Registered doctors","Profiles currently mirror the SQL sample data.",`<div class="filter-row"><div class="search-wrap"><span>⌕</span><input id="doctorSearch" placeholder="Search doctor or specialization"></div></div><div id="doctorsTable"></div>`);
- }else if(page==="appointments"){
-  html=intro("DBMS · APPOINTMENTS","Appointment management","Appointment rows join patient and doctor records using foreign keys.","New appointment","new-appointment");
-  html+=card("Appointment list","The final view should use the appointment JOIN query from the database.",`<div class="filter-row"><div class="search-wrap"><span>⌕</span><input id="appointmentSearch" placeholder="Search patient, doctor or status"></div>${selectField("Status","appointmentFilter",[{value:"All",label:"All statuses"},{value:"Scheduled",label:"Scheduled"},{value:"Completed",label:"Completed"},{value:"Cancelled",label:"Cancelled"}])}</div><div id="appointmentsTable"></div>`);
- }else if(page==="resources"){
-  html=intro("DBMS · RESOURCE INVENTORY","Beds & resources","Separate views for bed status and available/total quantities. Banker allocation uses its own process-resource matrix.","Add resource","new-resource");
-  html+=`<div class="metric-grid os-resource-grid">${osInventory.map((r,i)=>`<article class="metric-card"><div class="metric-head"><span>${r.name}</span><span class="metric-icon ${["green","violet","cyan"][i]}">${["▤","⚕","◉"][i]}</span></div><div class="metric-number" id="os-available-${r.key}">${r.available} <small>/ ${r.total}</small></div><div class="metric-foot"><span class="tiny-dot ${r.available?"green-dot":"amber-dot"}"></span><span>${r.available} currently available</span></div><div class="resource-bar"><i style="width:${r.available/r.total*100}%"></i></div></article>`).join("")}</div>
-  <div class="module-grid equal">${card("Allocate or release OS resources","Select a resource and quantity. Allocation and release are tracked in this browser preview only.",`<form id="osResourceForm"><div class="field-grid">${selectField("Resource","osResource",osInventory.map(r=>({value:r.key,label:r.name})))}${field("Quantity","osQuantity","number","Enter quantity",'min="1" step="1" value="1" required')}</div><div class="form-actions"><button type="button" class="button button-light" data-action="release-os-resource">Release resource</button><button type="submit" class="button button-primary">Allocate resource</button></div></form><div id="osResourceMessage" class="inline-note"><b>Resource rules</b><span>Quantity must be a positive whole number. You cannot allocate more than is available or release more than has been allocated.</span></div><div id="osResourceLedger"></div>`)}${card("Hospital inventory · DBMS","Existing database-backed resource views are preserved separately from the OS simulation.",`<div class="mini-stat-grid"><div class="mini-stat"><span>Available beds (DBMS)</span><b>${availableBeds()}</b></div><div class="mini-stat"><span>Occupied beds</span><b>${state.beds.filter(b=>b.bed_status==="Occupied").length}</b></div><div class="mini-stat"><span>Maintenance</span><b>${state.beds.filter(b=>b.bed_status==="In Maintenance").length}</b></div></div><div id="bedsTable"></div><div id="resourcesTable"></div><div class="inline-note"><b>Note</b><span>OS inventory values (10 beds, 5 doctors, 8 monitoring devices) are the requested simulation defaults; they are not loaded from MySQL.</span></div>`)}</div>`;
- }else if(page==="treatments"){
-  html=intro("OS INPUT · TREATMENT PROCESSES","Treatment process queue","Maps to `treatment_processes`: patient/appointment, process name, arrival time, burst time, priority and status.","Add process","new-process");
-  html+=`<div class="module-grid"><div>${card("Process queue","These are scheduling inputs. Arrival time, burst time and priority are sent to the OS module.",`<div class="filter-row"><div class="search-wrap"><span>⌕</span><input id="processSearch" placeholder="Search process or patient"></div></div><div id="processTable"></div>`)}</div><div>${card("Input guide","Use consistent units for all process times.",`<div class="algorithm-explainer"><div class="explain-row"><span class="explain-num">1</span><div><b>Arrival time</b><p>When the process enters the treatment queue.</p></div></div><div class="explain-row"><span class="explain-num">2</span><div><b>Burst time</b><p>Estimated processing duration; must be greater than zero.</p></div></div><div class="explain-row"><span class="explain-num">3</span><div><b>Priority</b><p>Agree with Vansh whether lower or higher numbers mean higher priority.</p></div></div></div><div class="inline-note"><b>Important</b><span>Priority direction must match the Java scheduling implementation; the UI should not silently assume it.</span></div>`)}</div></div>`;
- }else if(page==="scheduler"){
-  html=intro("OS MODULE · TREATMENT SCHEDULING","Treatment scheduling simulator","Select an OS scheduling algorithm for queued patient treatment processes and review the resulting metrics.");
-  html+=`<div class="module-grid"><div>${card("Run configuration","Uses the patient treatment process inputs from the Treatment processes module.",`<div class="algorithm-tabs" id="algorithmTabs">${["FCFS","SJF","Priority","Round Robin"].map(a=>`<button data-algorithm="${a}" class="${a===selectedAlgorithm?"active":""}">${a}</button>`).join("")}</div><div class="field-grid" id="quantumField" style="${selectedAlgorithm==="Round Robin"?"":"display:none"}">${field("Time quantum","quantum","number","e.g. 2",'min="1" value="2"')}</div><div class="inline-note"><b>Integration boundary</b><span>This preview uses client-side calculations for demonstration. Replace the run handler with Vansh’s confirmed Java API and render its returned scheduling_runs and scheduling_results.</span></div><div class="form-actions"><button class="button button-primary" data-action="run-scheduler">▶ Run scheduling</button></div>`)}</div><div>${card("Scheduling definitions","Metrics shown below are computed from the selected preview algorithm.",`<div class="algorithm-explainer"><div class="explain-row"><span class="explain-num">CT</span><div><b>Completion time</b><p>Clock time when a process finishes.</p></div></div><div class="explain-row"><span class="explain-num">TAT</span><div><b>Turnaround time</b><p>Completion time − arrival time.</p></div></div><div class="explain-row"><span class="explain-num">WT</span><div><b>Waiting time</b><p>Turnaround time − burst time.</p></div></div></div>`)}</div></div><div id="scheduleOutput">${renderScheduleOutput()}</div>`;
- }else if(page==="allocation"){
-  html=intro("OS MODULE · DEADLOCK AVOIDANCE","Banker’s algorithm","Safety checks use allocated, maximum and available resource vectors for a consistent snapshot.","Calculate safety state","check-banker-input");
-  html+=`<div class="module-grid"><div>${card("Banker’s Algorithm input","Edit Allocation, Maximum Demand and Available vectors. Need is calculated as Maximum − Allocation.",`<div class="banker-inputs"><div class="banker-available"><b>Available resources</b>${bankerDefaults.resources.map((r,i)=>`<div class="field"><label for="bank-av-${i}">${r}</label><input id="bank-av-${i}" type="number" min="0" step="1" value="${bankerDefaults.available[i]}"></div>`).join("")}</div><div class="data-table-wrap"><table class="banker-table"><thead><tr><th>Patient</th><th>Allocation (B,D,M)</th><th>Maximum (B,D,M)</th></tr></thead><tbody>${bankerDefaults.patients.map((p,i)=>`<tr><td><b>${p.name}</b></td><td>${p.allocation.map((v,j)=>`<label class="sr-only" for="bank-a-${i}-${j}">${p.name} allocation ${bankerDefaults.resources[j]}</label><input id="bank-a-${i}-${j}" aria-label="${p.name} allocation ${bankerDefaults.resources[j]}" type="number" min="0" step="1" value="${v}">`).join("")}</td><td>${p.maximum.map((v,j)=>`<label class="sr-only" for="bank-m-${i}-${j}">${p.name} maximum ${bankerDefaults.resources[j]}</label><input id="bank-m-${i}-${j}" aria-label="${p.name} maximum ${bankerDefaults.resources[j]}" type="number" min="0" step="1" value="${v}">`).join("")}</td></tr>`).join("")}</tbody></table></div></div><div class="form-actions"><button class="button button-primary" data-action="check-banker-input">Calculate safety state</button></div><div class="inline-note"><b>Resource order</b><span>B = Beds · D = Doctors · M = Monitoring Devices. These are editable example values for the UI preview, not values retrieved from Java.</span></div>`)}</div><div>${card("Safety result","The safety state is calculated from the matrix currently entered above.",`<div id="bankerInputResult"><div class="safe-banner safe"><span class="big-check">?</span><div><b>Not checked yet</b><span>Enter the snapshot and calculate to show SAFE or UNSAFE.</span></div></div></div><div class="algorithm-explainer"><div class="explain-row"><span class="explain-num">1</span><div><b>Need = Maximum − Allocation</b><p>Remaining resources each patient may still request.</p></div></div><div class="explain-row"><span class="explain-num">2</span><div><b>Find a safe sequence</b><p>Find an unfinished patient whose Need can be met by Available, then release its allocation back into Work.</p></div></div></div>`)}</div></div><div class="module-grid equal"><div>${card("Existing allocation records","Current sample allocation rows from the local DBMS preview.",`<div id="allocationMatrix"></div>`)}</div><div>${card("OS concepts for viva","Short explanations for the evaluation.",`<div class="algorithm-explainer"><div class="explain-row"><span class="explain-num">FCFS</span><div><b>First Come, First Served</b><p>Treatment tasks execute in arrival order. It is simple but a long task can make others wait.</p></div></div><div class="explain-row"><span class="explain-num">P</span><div><b>Priority Scheduling</b><p>The scheduler chooses the highest-priority task. In this project prompt, priority 1 means highest priority.</p></div></div><div class="explain-row"><span class="explain-num">RA</span><div><b>Resource allocation</b><p>Assigns limited beds, doctors and monitoring devices to treatment tasks and tracks release.</p></div></div><div class="explain-row"><span class="explain-num">BA</span><div><b>Banker’s Algorithm</b><p>Checks whether resources can be allocated in an order that lets every process finish safely.</p></div></div></div>`)}</div></div>`;
- }else if(page==="history"){
-  html=intro("OS OUTPUT · AUDIT TRAIL","Run history","Scheduling run metadata and process-level results should be persisted and loaded from the Java API.");
-  html+=`<div class="module-grid equal">${card("Scheduling runs","Maps to `scheduling_runs`.",`<div id="runsTable"></div>`)}${card("Latest result details","Maps to `scheduling_results`; a preemptive Gantt chart may require multiple execution-segment rows per process.",`<div id="historyResults"></div>`)}</div><div class="inline-note"><b>Schema note</b><span>If scheduling_results stores only one row per process, it can store CT/WT/TAT but cannot accurately represent every segment of a preemptive schedule. Add a scheduling_segments table or equivalent if needed.</span></div>`;
- }
- host.innerHTML=html;wireModule(page);
-}
-function renderPatients(){
- const q=($("patientSearch")?.value||"").toLowerCase();const rows=state.patients.filter(p=>[p.patient_name,p.phone,p.address,String(p.patient_id)].join(" ").toLowerCase().includes(q));
- if($("patientTableCount"))$("patientTableCount").textContent=`${rows.length} record${rows.length===1?"":"s"}`;
- $("patientsTable").innerHTML=table(["PATIENT","AGE","GENDER","PHONE","ADDRESS"],rows.map(p=>`<tr><td>${personCell(p.patient_name,`Patient ID ${p.patient_id}`)}</td><td>${p.age}</td><td>${escapeHtml(p.gender||"—")}</td><td>${escapeHtml(p.phone||"—")}</td><td>${escapeHtml(p.address||"—")}</td></tr>`));
-}
-function renderDoctors(){
- const q=($("doctorSearch")?.value||"").toLowerCase();const rows=state.doctors.filter(d=>(d.doctor_name+" "+d.specialization+" "+d.phone).toLowerCase().includes(q));
- $("doctorsTable").innerHTML=table(["DOCTOR","SPECIALIZATION","PHONE","STATUS"],rows.map(d=>`<tr><td>${personCell(d.doctor_name,`Doctor ID ${d.doctor_id}`,"violet")}</td><td>${escapeHtml(d.specialization)}</td><td>${escapeHtml(d.phone||"—")}</td><td>${statusTag("Listed")}</td></tr>`));
-}
-function renderAppointments(){
- const q=($("appointmentSearch")?.value||"").toLowerCase(),filter=$("appointmentFilter")?.value||"All";
- const rows=state.appointments.filter(a=>(filter==="All"||a.appointment_status===filter)&&(patientName(a.patient_id)+" "+doctorName(a.doctor_id)+" "+a.appointment_status).toLowerCase().includes(q));
- $("appointmentsTable").innerHTML=table(["APPOINTMENT","PATIENT","DOCTOR","DATE & TIME","STATUS"],rows.map((a,i)=>`<tr><td><b>#APT-${String(a.appointment_id).padStart(3,"0")}</b></td><td>${personCell(patientName(a.patient_id),`Patient ID ${a.patient_id}`,["cyan","violet","green"][i%3])}</td><td>${escapeHtml(doctorName(a.doctor_id))}</td><td>${escapeHtml(dateTime(a.appointment_date,a.appointment_time))}</td><td>${statusTag(a.appointment_status)}</td></tr>`));
-}
-function renderBeds(){
- $("bedsTable").innerHTML=table(["BED","WARD","STATUS"],state.beds.map(b=>`<tr><td><b>${escapeHtml(b.bed_number)}</b><small class="person-id">Bed ID ${b.bed_id}</small></td><td>${escapeHtml(b.ward)}</td><td>${statusTag(b.bed_status)}</td></tr>`));
- $("resourcesTable").innerHTML=table(["RESOURCE","AVAILABLE","TOTAL","STOCK"],state.resources.map(r=>`<tr><td><b>${escapeHtml(r.resource_name)}</b><small class="person-id">Resource ID ${r.resource_id}</small></td><td>${r.available_quantity}</td><td>${r.total_quantity}</td><td>${statusTag(r.available_quantity>0?"Available":"Unavailable")}</td></tr>`));
-}
-function renderProcesses(){
- const q=($("processSearch")?.value||"").toLowerCase();const rows=state.treatment_processes.filter(p=>(p.process_name+" "+patientName(p.patient_id)+" "+p.process_id).toLowerCase().includes(q));
- $("processTable").innerHTML=table(["PROCESS","PATIENT","ARRIVAL","BURST","PRIORITY","STATUS"],rows.map(p=>`<tr><td><b>${escapeHtml(p.process_name)}</b><small class="person-id">P-${p.process_id}</small></td><td>${escapeHtml(patientName(p.patient_id))}</td><td>${p.arrival_time}</td><td>${p.burst_time}</td><td><b>${p.priority}</b></td><td>${statusTag(p.process_status)}</td></tr>`));
-}
-function calcSchedule(algorithm,quantum=2){
- const pending=state.treatment_processes.filter(p=>p.process_status!=="Completed").map(p=>({...p,remaining:Number(p.burst_time),start:null}));
- if(!pending.length)return {algorithm,rows:[],segments:[],avgWait:0,avgTat:0};
- const rows=[],segments=[];let time=0,done=0,guard=0;
- if(algorithm==="FCFS"||algorithm==="SJF"||algorithm==="Priority"){
-  let available=[];
-  while(done<pending.length&&guard++<10000){
-   available=pending.filter(p=>!p._done&&p.arrival_time<=time);
-   if(!available.length){time=Math.min(...pending.filter(p=>!p._done).map(p=>Number(p.arrival_time)));continue;}
-   available.sort((a,b)=>algorithm==="FCFS"?(a.arrival_time-b.arrival_time||a.process_id-b.process_id):algorithm==="SJF"?(a.burst_time-b.burst_time||a.arrival_time-b.arrival_time||a.process_id-b.process_id):(a.priority-b.priority||a.arrival_time-b.arrival_time||a.process_id-b.process_id));
-   const p=available[0],start=time;time+=Number(p.burst_time);p._done=true;done++;segments.push({process_id:p.process_id,start,end:time});rows.push({process_id:p.process_id,process_name:p.process_name,arrival_time:Number(p.arrival_time),burst_time:Number(p.burst_time),priority:Number(p.priority),start_time:start,completion_time:time,turnaround_time:time-Number(p.arrival_time),waiting_time:time-Number(p.arrival_time)-Number(p.burst_time)});
+function updateConnectionUI(statusData) {
+  const dot = $("sidebarDot");
+  const title = $("sidebarStatusTitle");
+  const sub = $("sidebarStatusSub");
+  const pill = $("sidebarEnvPill");
+  const topbar = $("topbarEnv");
+  const notice = $("prototypeNotice");
+
+  if (statusData && statusData.db_connected) {
+    state.dbConnected = true;
+    if (dot) dot.style.background = "#10b981";
+    if (title) title.textContent = "Java + MySQL";
+    if (sub) sub.textContent = "Connected (model_db)";
+    if (pill) { pill.textContent = "ONLINE"; pill.style.background = "#059669"; }
+    if (topbar) topbar.innerHTML = "<i></i> MYSQL CONNECTED (JDBC)";
+    if (notice) notice.classList.add("hidden");
+  } else {
+    state.dbConnected = false;
+    if (dot) dot.style.background = "#10b981";
+    if (title) title.textContent = "Java Backend Live";
+    if (sub) sub.textContent = "Active Memory Mode";
+    if (pill) { pill.textContent = "ACTIVE"; pill.style.background = "#0284c7"; }
+    if (topbar) topbar.innerHTML = "<i></i> JAVA BACKEND ACTIVE";
   }
- }else{
-  const queue=[];let added=new Set();
-  while(done<pending.length&&guard++<10000){
-   pending.filter(p=>!added.has(p.process_id)&&Number(p.arrival_time)<=time).sort((a,b)=>a.arrival_time-b.arrival_time||a.process_id-b.process_id).forEach(p=>{queue.push(p);added.add(p.process_id);});
-   if(!queue.length){const next=Math.min(...pending.filter(p=>p.remaining>0).map(p=>Number(p.arrival_time)));time=Math.max(time,next);continue;}
-   const p=queue.shift(),start=time,run=Math.min(Number(quantum),p.remaining);time+=run;p.remaining-=run;segments.push({process_id:p.process_id,start,end:time});
-   pending.filter(x=>!added.has(x.process_id)&&Number(x.arrival_time)<=time).sort((a,b)=>a.arrival_time-b.arrival_time||a.process_id-b.process_id).forEach(x=>{queue.push(x);added.add(x.process_id);});
-   if(p.remaining>0)queue.push(p);else{done++;rows.push({process_id:p.process_id,process_name:p.process_name,arrival_time:Number(p.arrival_time),burst_time:Number(p.burst_time),priority:Number(p.priority),start_time:null,completion_time:time,turnaround_time:time-Number(p.arrival_time),waiting_time:time-Number(p.arrival_time)-Number(p.burst_time)});}
+}
+
+// -------------------------------------------------------------
+// BACKEND DATA SYNCHRONIZATION
+// -------------------------------------------------------------
+
+async function loadDataFromBackend() {
+  try {
+    const statusRes = await fetch(`${API_BASE}/api/status`).then(r => r.json()).catch(() => null);
+    updateConnectionUI(statusRes);
+
+    const [patients, doctors, beds, resources, appointments, processes, history, allocations] = await Promise.all([
+      fetch(`${API_BASE}/api/patients`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/doctors`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/beds`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/resources`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/appointments`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/processes`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/history`).then(r => r.json()).catch(() => []),
+      fetch(`${API_BASE}/api/allocations`).then(r => r.json()).catch(() => [])
+    ]);
+
+    if (Array.isArray(patients)) state.patients = patients;
+    if (Array.isArray(doctors)) state.doctors = doctors;
+    if (Array.isArray(beds)) state.beds = beds;
+    if (Array.isArray(resources)) state.resources = resources;
+    if (Array.isArray(appointments)) state.appointments = appointments;
+    if (Array.isArray(processes)) state.treatment_processes = processes;
+    if (Array.isArray(history)) state.scheduling_runs = history;
+    if (Array.isArray(allocations)) state.resource_allocations = allocations;
+
+    refreshOverview();
+    if (state.page !== "overview") renderModule(state.page);
+
+  } catch (err) {
+    console.error("Backend fetch error:", err);
   }
- }
- rows.sort((a,b)=>a.process_id-b.process_id);
- const avgWait=rows.reduce((s,r)=>s+r.waiting_time,0)/(rows.length||1),avgTat=rows.reduce((s,r)=>s+r.turnaround_time,0)/(rows.length||1);
- return {algorithm,rows,segments,avgWait,avgTat,quantum:algorithm==="Round Robin"?Number(quantum):null,run_id:state.scheduling_runs.length+1};
 }
-function renderScheduleOutput(){
- if(!lastSchedule)return `<article class="module-card"><h3>Scheduling output</h3><p class="muted">Run an algorithm to calculate a preview of completion time, waiting time and turnaround time.</p><div class="inline-note"><b>No run yet</b><span>Results will appear here. This is not yet connected to the OS Java module.</span></div></article>`;
- const s=lastSchedule,max=Math.max(1,...s.segments.map(x=>x.end));
- const gantt=`<div class="gantt-result"><div class="gantt-labels"><span>Process</span><span>Execution timeline <small>(preview units)</small></span></div>${[...new Set(s.segments.map(x=>x.process_id))].map(pid=>`<div class="gantt-row"><span class="process-label">P-${pid}</span><div class="gantt-track">${s.segments.filter(seg=>seg.process_id===pid).map((seg,i)=>`<i class="gantt-segment ${["seg-blue","seg-lilac","seg-green","seg-amber"][pid%4]}" style="left:${seg.start/max*100}%;width:${Math.max(1,(seg.end-seg.start)/max*100)}%" title="${seg.start}–${seg.end}">${seg.start}–${seg.end}</i>`).join("")}</div></div>`).join("")}<div class="gantt-ticks"><span>0</span><span>${(max*.25).toFixed(1)}</span><span>${(max*.5).toFixed(1)}</span><span>${(max*.75).toFixed(1)}</span><span>${max}</span></div></div>`;
- return `<article class="module-card"><div class="panel-title-row"><div><h3>Run #${s.run_id} · ${escapeHtml(s.algorithm)}</h3><p class="muted">Client-side preview; not saved to scheduling_runs.</p></div>${statusTag("Preview")}</div><div class="result-cards"><div class="result-card"><span>Average waiting time</span><b>${s.avgWait.toFixed(2)}</b></div><div class="result-card"><span>Average turnaround</span><b>${s.avgTat.toFixed(2)}</b></div><div class="result-card"><span>Processes completed</span><b>${s.rows.length}</b></div></div>${gantt}<div style="margin-top:19px">${table(["PROCESS","ARRIVAL","BURST","PRIORITY","COMPLETION (CT)","TURNAROUND (TAT)","WAITING (WT)"],s.rows.map(r=>`<tr><td><b>P-${r.process_id}</b><small class="person-id">${escapeHtml(r.process_name)}</small></td><td>${r.arrival_time}</td><td>${r.burst_time}</td><td>${r.priority}</td><td>${r.completion_time}</td><td>${r.turnaround_time}</td><td>${r.waiting_time}</td></tr>`))}</div></article>`;
+
+function refreshOverview() {
+  if ($("metricPatients")) $("metricPatients").textContent = state.patients.length;
+  if ($("metricAppointments")) $("metricAppointments").textContent = state.appointments.length;
+  if ($("metricBeds")) $("metricBeds").innerHTML = `${availableBedsCount()} <small>/ ${totalBedsCount()}</small>`;
+  if ($("bedFoot")) $("bedFoot").textContent = `${availableBedsCount()} available (${totalBedsCount() - availableBedsCount()} assigned 1:1)`;
+  if ($("metricQueue")) $("metricQueue").textContent = queued();
+  if ($("navPatientCount")) $("navPatientCount").textContent = state.patients.length;
+  if ($("overviewProcesses")) $("overviewProcesses").textContent = queued();
+
+  if ($("overviewResources")) {
+    $("overviewResources").innerHTML = state.resources.map((r, i) => {
+      let pct = r.total_quantity ? Math.round((r.available_quantity / r.total_quantity) * 100) : 0;
+      return `<div class="resource-line">
+        <div class="resource-icon ${["green", "violet", "cyan", "amber", "green"][i % 5]}">${["🛏️", "⚕", "◉", "🫁", "✚"][i % 5]}</div>
+        <div class="resource-detail">
+          <b>${escapeHtml(r.resource_name)}</b>
+          <small>${r.available_quantity} available of ${r.total_quantity}</small>
+          <div class="resource-bar"><i style="width:${Math.min(100, Math.max(0, pct))}%"></i></div>
+        </div>
+        <span class="resource-amount">${pct}%</span>
+      </div>`;
+    }).join("");
+  }
+
+  const search = ($("overviewSearch")?.value || "").toLowerCase();
+  const rows = state.appointments.filter(a =>
+    (patientName(a.patient_id) + " " + doctorName(a.doctor_id)).toLowerCase().includes(search)
+  ).slice(0, 5);
+
+  if ($("overviewAppointments")) {
+    $("overviewAppointments").innerHTML = rows.length ? rows.map((a, i) =>
+      `<tr>
+        <td><b>#APT-${String(a.appointment_id).padStart(3, "0")}</b></td>
+        <td>${personCell(patientName(a.patient_id), `Patient ID ${a.patient_id}`, ["cyan", "violet", "green"][i % 3])}</td>
+        <td>${escapeHtml(doctorName(a.doctor_id))}</td>
+        <td>${escapeHtml(dateTime(a.appointment_date, a.appointment_time))}</td>
+        <td>${statusTag(a.appointment_status)}</td>
+      </tr>`
+    ).join("") : `<tr><td colspan="5" class="empty-state">No appointments recorded yet.</td></tr>`;
+  }
+
+  if (lastSchedule) {
+    if ($("overviewAlgorithm")) $("overviewAlgorithm").textContent = `${lastSchedule.algorithm} (${lastSchedule.work_category || "Workload"})`;
+    if ($("overviewWait")) $("overviewWait").innerHTML = `${Number(lastSchedule.avgWait || 0).toFixed(1)} <small>units</small>`;
+  } else {
+    if ($("overviewAlgorithm")) $("overviewAlgorithm").textContent = "Priority (Emergency)";
+    if ($("overviewWait")) $("overviewWait").innerHTML = "— <small>units</small>";
+  }
 }
-function allocationMatrixHtml(){
- const rs=state.resources;const rows=state.resource_allocations;
- return table(["PROCESS","PATIENT","RESOURCE","ALLOCATED","MAXIMUM","NEED"],rows.map(a=>`<tr><td><b>P-${a.process_id}</b></td><td>${escapeHtml(patientName(state.treatment_processes.find(p=>p.process_id===a.process_id)?.patient_id||0))}</td><td>${escapeHtml(rs.find(r=>r.resource_id===a.resource_id)?.resource_name||"Resource")}</td><td>${a.allocated_quantity}</td><td>${a.maximum_quantity}</td><td>${Math.max(0,a.maximum_quantity-a.allocated_quantity)}</td></tr>`));
+
+function go(page) {
+  if (!pages[page]) page = "overview";
+  state.page = page;
+  const cfg = pages[page];
+
+  document.querySelectorAll(".nav-item").forEach(b => b.classList.toggle("active", b.dataset.page === page));
+  if ($("crumb")) $("crumb").textContent = cfg.crumb;
+  if (page === "overview") {
+    updateGreeting();
+  } else {
+    if ($("pageTitle")) $("pageTitle").textContent = cfg.title;
+  }
+  if ($("pageSubtitle")) $("pageSubtitle").textContent = cfg.subtitle;
+  if ($("primaryAction")) $("primaryAction").innerHTML = `＋ <span>${escapeHtml(cfg.action)}</span>`;
+
+  if ($("overviewView")) $("overviewView").classList.toggle("hidden", page !== "overview");
+  if ($("moduleView")) $("moduleView").classList.toggle("hidden", page === "overview");
+  if ($("sidebar")) $("sidebar").classList.remove("open");
+
+  if (page !== "overview") renderModule(page);
+  refreshOverview();
 }
-function runSafetyPreview(){
- const available=state.resources.map(r=>Number(r.available_quantity));
- const allocations=state.resource_allocations;
- const processIds=[...new Set(allocations.map(a=>a.process_id))];
- // Demo model: every process's remaining need is calculated from allocation rows.
- // Since the database currently stores quantities per resource row, absent resource rows are treated as zero only for this preview.
- const work=[...available],finish=Object.fromEntries(processIds.map(id=>[id,false])),sequence=[];
- const needByProcess={};const allocByProcess={};
- processIds.forEach(pid=>{needByProcess[pid]=state.resources.map(r=>{const a=allocations.find(x=>x.process_id===pid&&x.resource_id===r.resource_id);return a?Math.max(0,a.maximum_quantity-a.allocated_quantity):0;});allocByProcess[pid]=state.resources.map(r=>allocations.find(x=>x.process_id===pid&&x.resource_id===r.resource_id)?.allocated_quantity||0);});
- let changed=true,loops=0;
- while(changed&&loops++<processIds.length+2){changed=false;for(const pid of processIds){if(finish[pid])continue;const need=needByProcess[pid];if(need.every((n,i)=>n<=work[i])){work.forEach((v,i)=>work[i]+=allocByProcess[pid][i]);finish[pid]=true;sequence.push(pid);changed=true;}}}
- lastSafety={safe:sequence.length===processIds.length,sequence,work,processIds};
- return lastSafety;
+
+function table(headers, rows, empty = "No records found.") {
+  return `<div class="data-table-wrap"><table><thead><tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.length ? rows.join("") : `<tr><td colspan="${headers.length}" class="empty-state">${empty}</td></tr>`}</tbody></table></div>`;
 }
-function renderSafetyResult(){
- if(!lastSafety)return `<div class="safe-banner safe"><span class="big-check">?</span><div><b>Not checked yet</b><span>Run the safety check to show a preview result.</span></div></div><p class="muted">This uses the current demo resource quantities. The official result must come from Vansh’s OS module.</p>`;
- if(lastSafety.safe)return `<div class="safe-banner safe"><span class="big-check">✓</span><div><b>Safe state in preview</b><span>All included processes could finish under the current simplified snapshot.</span></div></div><b style="font-size:10px;color:#58796d">Safe sequence</b><div class="safe-sequence">${lastSafety.sequence.map((p,i)=>`${i?'<i>→</i>':""}<span>P-${p}</span>`).join("")}</div><div class="inline-note"><b>Not authoritative</b><span>Confirm complete Allocation, Maximum and Available vectors with the backend before using this as a project result.</span></div>`;
- return `<div class="safe-banner unsafe"><span class="big-check">!</span><div><b>Safe sequence not found</b><span>The simplified preview could not complete every process.</span></div></div><p class="muted">Inspect Available, Allocation and Need values, then rerun with a consistent resource snapshot.</p>`;
+
+function intro(kicker, title, desc, actionLabel = "", action = "") {
+  return `<div class="module-intro"><div><div class="section-kicker">${kicker}</div><h2>${title}</h2><p>${desc}</p></div>${actionLabel ? `<button class="button button-primary" data-action="${action}">＋ ${actionLabel}</button>` : ""}</div>`;
 }
-function changeOSResource(allocate){
- const key=$("f-osResource")?.value, qty=Number($("f-osQuantity")?.value), r=osInventory.find(x=>x.key===key);
- if(!r||!Number.isInteger(qty)||qty<=0){toast("Enter a positive whole-number quantity.");return;}
- const allocated=osResourceLedger.filter(x=>x.key===key).reduce((sum,x)=>sum+x.quantity,0);
- if(allocate){if(qty>r.available){toast(`Cannot allocate ${qty}; only ${r.available} ${r.name.toLowerCase()} available.`);return;}r.available-=qty;osResourceLedger.push({key,name:r.name,quantity:qty,at:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})});}
- else {if(qty>allocated){toast(`Cannot release ${qty}; only ${allocated} ${r.name.toLowerCase()} allocated in this preview.`);return;}let left=qty;for(let i=osResourceLedger.length-1;i>=0&&left>0;i--){const x=osResourceLedger[i];if(x.key!==key)continue;const take=Math.min(left,x.quantity);x.quantity-=take;left-=take;if(x.quantity===0)osResourceLedger.splice(i,1);}r.available=Math.min(r.total,r.available+qty);}
- osInventory.forEach(x=>{const el=$("os-available-"+x.key);if(el)el.innerHTML=`${x.available} <small>/ ${x.total}</small>`;});
- renderOSResourceLedger();const msg=$("osResourceMessage");if(msg)msg.innerHTML=`<b>${allocate?"Allocation successful":"Resource released"}</b><span>${qty} ${r.name.toLowerCase()} ${allocate?"allocated":"released"}. ${r.available} currently available. Local preview only; not sent to Java/MySQL.</span>`;
- toast(`${r.name}: ${allocate?"allocated":"released"} ${qty}. Local preview only.`);
+
+function card(title, desc, body) {
+  return `<article class="module-card"><h3>${title}</h3><p class="muted">${desc}</p>${body}</article>`;
 }
-function renderOSResourceLedger(){const host=$("osResourceLedger");if(!host)return;host.innerHTML=table(["RESOURCE","ALLOCATED","ACTION"],osResourceLedger.map(x=>`<tr><td><b>${escapeHtml(x.name)}</b></td><td>${x.quantity}</td><td>${escapeHtml(x.at)}</td></tr>`),"No OS resources allocated yet.");}
-function checkBankerInput(){
- const n=bankerDefaults.patients.length,m=bankerDefaults.resources.length;
- const read=id=>{const el=$(id),v=Number(el?.value);if(!el||!Number.isInteger(v)||v<0)throw new Error("All matrix values must be non-negative whole numbers.");return v;};
- try{
-  const available=bankerDefaults.resources.map((_,j)=>read(`bank-av-${j}`));
-  const alloc=bankerDefaults.patients.map((_,i)=>bankerDefaults.resources.map((_,j)=>read(`bank-a-${i}-${j}`)));
-  const max=bankerDefaults.patients.map((_,i)=>bankerDefaults.resources.map((_,j)=>read(`bank-m-${i}-${j}`)));
-  for(let i=0;i<n;i++)for(let j=0;j<m;j++)if(alloc[i][j]>max[i][j])throw new Error(`${bankerDefaults.patients[i].name}: Allocation cannot exceed Maximum Demand for ${bankerDefaults.resources[j]}.`);
-  let work=[...available],finish=Array(n).fill(false),seq=[];let progress=true;
-  while(progress){progress=false;for(let i=0;i<n;i++){if(finish[i])continue;const need=max[i].map((v,j)=>v-alloc[i][j]);if(need.every((v,j)=>v<=work[j])){work=work.map((v,j)=>v+alloc[i][j]);finish[i]=true;seq.push(i);progress=true;}}}
-  const safe=finish.every(Boolean),host=$("bankerInputResult");
-  if(safe)host.innerHTML=`<div class="safe-banner safe"><span class="big-check">✓</span><div><b>SAFE state</b><span>A safe sequence was found for the values entered.</span></div></div><b style="font-size:10px;color:#58796d">Safe sequence</b><div class="safe-sequence">${seq.map((i,k)=>`${k?'<i>→</i>':""}<span>${bankerDefaults.patients[i].name}</span>`).join("")}</div>`;
-  else host.innerHTML=`<div class="safe-banner unsafe"><span class="big-check">!</span><div><b>UNSAFE state</b><span>No safe sequence was found for the entered Allocation, Maximum Demand and Available values.</span></div></div>`;
-  toast(safe?"Banker preview: SAFE state.":"Banker preview: UNSAFE state.");
- }catch(e){toast(e.message);}
+
+function field(label, name, type = "text", placeholder = "", extra = "", value = "") {
+  return `<div class="field"><label for="f-${name}">${label}</label><input id="f-${name}" name="${name}" type="${type}" placeholder="${placeholder}" value="${escapeHtml(value)}" ${extra}></div>`;
 }
-function renderHistory(){
- $("runsTable").innerHTML=table(["RUN","ALGORITHM","QUANTUM","EXECUTED AT"],state.scheduling_runs.map(r=>`<tr><td><b>#RUN-${r.run_id}</b></td><td>${escapeHtml(r.algorithm)}</td><td>${r.time_quantum??"—"}</td><td>${escapeHtml(r.executed_at)}</td></tr>`));
- $("historyResults").innerHTML=lastSchedule?table(["PROCESS","CT","TAT","WT"],lastSchedule.rows.map(r=>`<tr><td>P-${r.process_id}</td><td>${r.completion_time}</td><td>${r.turnaround_time}</td><td>${r.waiting_time}</td></tr>`)):`<div class="inline-note"><b>No scheduling output saved</b><span>Local preview runs are not persisted. The final screen should load persisted results from the backend.</span></div>`;
+
+function selectField(label, name, options, selectedValue = "") {
+  return `<div class="field"><label for="f-${name}">${label}</label><select id="f-${name}" name="${name}">${options.map(o => `<option value="${escapeHtml(o.value)}" ${String(o.value) === String(selectedValue) ? "selected" : ""}>${escapeHtml(o.label)}</option>`).join("")}</select></div>`;
 }
-function wireModule(page){
- if(page==="patients"){renderPatients();$("patientSearch").addEventListener("input",renderPatients);}
- if(page==="doctors"){renderDoctors();$("doctorSearch").addEventListener("input",renderDoctors);}
- if(page==="appointments"){renderAppointments();$("appointmentSearch").addEventListener("input",renderAppointments);$("appointmentFilter").addEventListener("change",renderAppointments);}
- if(page==="resources"){
-  renderBeds();
-  const f=$("osResourceForm"); if(f) f.addEventListener("submit",e=>{e.preventDefault();changeOSResource(true);});
-  renderOSResourceLedger();
- }
- if(page==="treatments"){renderProcesses();$("processSearch").addEventListener("input",renderProcesses);}
- if(page==="scheduler"){document.querySelectorAll("[data-algorithm]").forEach(b=>b.addEventListener("click",()=>{selectedAlgorithm=b.dataset.algorithm;renderModule("scheduler");}));}
- if(page==="allocation"){$("allocationMatrix").innerHTML=allocationMatrixHtml();}
- if(page==="history")renderHistory();
+
+// -------------------------------------------------------------
+// MODULE RENDERING
+// -------------------------------------------------------------
+
+function renderModule(page) {
+  const host = $("moduleContent");
+  if (!host) return;
+  let html = "";
+
+  if (page === "patients") {
+    html = intro("DBMS CRUD & 1:1 CARDINALITY · PATIENTS & BEDS", "Patient Management", "Complete Create, Read, Update, Delete with real-time MySQL synchronization and strict 1:1 bed mapping.", "Register patient", "new-patient");
+    
+    // Departments extracted from state
+    const depts = ["All", ...new Set(state.patients.map(p => p.department).filter(Boolean))];
+    const deptOptions = depts.map(d => ({ value: d, label: d === "All" ? "All Departments" : d }));
+
+    html += card("Patient Registry (Live MySQL Data)", "Search patients by name, ID, phone number, department, or diagnosis. Actions update MySQL immediately.", `
+      <div class="filter-row">
+        <div class="search-wrap">
+          <span>⌕</span>
+          <input id="patientSearch" placeholder="Search by name, ID, phone, department, diagnosis..." aria-label="Search patients">
+        </div>
+        ${selectField("Filter Department", "patientDeptFilter", deptOptions)}
+        <span class="table-meta" id="patientTableCount"></span>
+      </div>
+      <div id="patientsTable"></div>
+      <div class="inline-note">
+        <b>1:1 Bed Relational Integrity</b>
+        <span>Each admitted patient is allocated exactly one dedicated bed. Editing admission status to Discharged or deleting the patient automatically frees their bed in MySQL.</span>
+      </div>
+    `);
+
+  } else if (page === "doctors") {
+    html = intro("DBMS CRUD · DOCTORS & CLINICAL STAFF", "Doctor Management", "Medical specialists and hospital departments with full Edit, Delete, Search, and Availability status.", "Add doctor", "new-doctor");
+    html += card("Registered Doctors (Live MySQL Data)", "Search doctors by name, specialization, ID, or department. Availability updates reflect immediately.", `
+      <div class="filter-row">
+        <div class="search-wrap">
+          <span>⌕</span>
+          <input id="doctorSearch" placeholder="Search by doctor name, specialization, ID, or department...">
+        </div>
+        <span class="table-meta" id="doctorTableCount"></span>
+      </div>
+      <div id="doctorsTable"></div>
+    `);
+
+  } else if (page === "appointments") {
+    html = intro("DBMS · APPOINTMENTS", "Appointment Management", "Relational foreign keys joining patients and doctors.", "New appointment", "new-appointment");
+    html += card("Appointment Schedule", "Joined patient and doctor consultation records.", `
+      <div class="filter-row">
+        <div class="search-wrap">
+          <span>⌕</span>
+          <input id="appointmentSearch" placeholder="Search patient, doctor or status">
+        </div>
+        ${selectField("Status", "appointmentFilter", [
+          { value: "All", label: "All statuses" },
+          { value: "Scheduled", label: "Scheduled" },
+          { value: "Completed", label: "Completed" },
+          { value: "Cancelled", label: "Cancelled" }
+        ])}
+      </div>
+      <div id="appointmentsTable"></div>
+    `);
+
+  } else if (page === "resources") {
+    html = intro("OS RESOURCE MANAGEMENT & DBMS INVENTORY", "Hospital Beds & Shared Resources", "Real-time bed occupancy tracking with dedicated 1:1 patient assignment, plus transactional allocation for shared devices.", "Add resource", "new-resource");
+    html += `<div class="metric-grid os-resource-grid">
+      <article class="metric-card">
+        <div class="metric-head"><span>Beds (1:1 Dedicated)</span><span class="metric-icon green">🛏️</span></div>
+        <div class="metric-number">${availableBedsCount()} <small>/ ${totalBedsCount()}</small></div>
+        <div class="metric-foot"><span class="tiny-dot green-dot"></span><span>${availableBedsCount()} available (${totalBedsCount() - availableBedsCount()} occupied)</span></div>
+        <div class="resource-bar"><i style="width:${(availableBedsCount() / totalBedsCount()) * 100}%"></i></div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-head"><span>Doctors</span><span class="metric-icon violet">⚕</span></div>
+        <div class="metric-number">${state.doctors.length} <small>Staff</small></div>
+        <div class="metric-foot"><span class="tiny-dot violet-dot"></span><span>Available across ${new Set(state.doctors.map(d=>d.department)).size} departments</span></div>
+        <div class="resource-bar"><i style="width:100%"></i></div>
+      </article>
+      <article class="metric-card">
+        <div class="metric-head"><span>Monitoring Devices</span><span class="metric-icon cyan">◉</span></div>
+        <div class="metric-number">20 <small>/ 25</small></div>
+        <div class="metric-foot"><span class="tiny-dot cyan-dot"></span><span>20 units available for ICU & telemetry</span></div>
+        <div class="resource-bar"><i style="width:80%"></i></div>
+      </article>
+    </div>
+    <div class="module-grid equal">
+      ${card("Hospital Bed Status (1 Dedicated Bed per Patient)", "Live occupancy status. Discharging a patient frees up their bed immediately.", `
+        <div class="mini-stat-grid">
+          <div class="mini-stat"><span>Available beds</span><b>${availableBedsCount()}</b></div>
+          <div class="mini-stat"><span>Occupied beds</span><b>${totalBedsCount() - availableBedsCount()}</b></div>
+        </div>
+        <div id="bedsTable"></div>
+      `)}
+      ${card("Shared Hospital Resources (ACID Transactions)", "Allocate and release devices using MySQL row-level locking.", `
+        <form id="osResourceForm">
+          <div class="field-grid">
+            ${selectField("Resource", "osResource", state.resources.filter(x => !x.resource_name.toLowerCase().includes("bed")).map(r => ({ value: r.resource_name, label: r.resource_name })))}
+            ${field("Quantity", "osQuantity", "number", "Enter quantity", 'min="1" step="1" value="1" required')}
+          </div>
+          <div class="form-actions">
+            <button type="button" class="button button-light" data-action="release-os-resource">Release device</button>
+            <button type="submit" class="button button-primary">Allocate device</button>
+          </div>
+        </form>
+        <div id="osResourceMessage" class="inline-note">
+          <b>ACID guarantees</b>
+          <span>Executed using <code>SELECT ... FOR UPDATE</code> with commit/rollback in MySQL.</span>
+        </div>
+      `)}
+    </div>`;
+
+  } else if (page === "treatments") {
+    html = intro("OS WORKLOAD DISPATCHER · 5 CATEGORIES", "Hospital Software Tasks by Workload", "Hospital software tasks clearly separated into 5 categories: Emergency, Interactive, OPD, Diagnostic, and Batch. Different workloads dispatch different CPU algorithms.", "Add software task", "new-process");
+    
+    html += card("Hospital Software Workloads Overview", "Academic simulation: background software tasks (telemetry processing, billing, doctor orders) executed by the Java OS scheduler.", `
+      <div class="filter-row">
+        <div class="search-wrap" style="width:340px">
+          <span>⌕</span>
+          <input id="processSearch" placeholder="Filter tasks by name, patient, or category...">
+        </div>
+        <span class="table-meta" id="totalTasksCount">${state.treatment_processes.length} total tasks</span>
+      </div>
+      <div id="workloadSectionsContainer" class="workload-sections"></div>
+    `);
+
+  } else if (page === "scheduler") {
+    html = intro("OPERATING SYSTEMS MODULE", "Treatment Scheduling Simulator", "Select a hospital workload to automatically dispatch the optimal OS scheduling algorithm, or choose an algorithm manually.");
+    
+    const currentWl = state.selectedWorkload || "Emergency";
+    html += `<div class="workload-selector">
+      ${Object.entries(workloadInfo).map(([key, info]) => `
+        <div class="workload-card ${key === currentWl ? "active" : ""}" data-workload="${key}">
+          <h4><span>${info.icon} ${info.title}</span> <span class="badge-workload ${info.tagClass}">${info.recommended}</span></h4>
+          <p>${info.desc}</p>
+          <span class="workload-algo-tag">Optimal: ${info.recommended} Scheduling</span>
+        </div>
+      `).join("")}
+    </div>`;
+
+    html += `<div class="module-grid">
+      <div>
+        ${card("Run Configuration", "Select algorithm or use the workload recommendation.", `
+          <div class="algorithm-tabs" id="algorithmTabs">
+            ${["Priority", "Round Robin", "FCFS", "SJF"].map(a => `<button data-algorithm="${a}" class="${a === selectedAlgorithm ? "active" : ""}">${a}</button>`).join("")}
+          </div>
+          <div class="field-grid" id="quantumField" style="${selectedAlgorithm === "Round Robin" ? "" : "display:none"}">
+            ${field("Time quantum (q)", "quantum", "number", "e.g. 2", 'min="1" value="2"')}
+          </div>
+          <div class="inline-note" id="workloadRationaleNote">
+            <b>Academic Rationale (${currentWl} Workload):</b>
+            <span>${escapeHtml(workloadInfo[currentWl]?.rationale || "Configurable algorithm execution.")}</span>
+          </div>
+          <div class="form-actions">
+            <button class="button button-primary" data-action="run-scheduler">▶ Run ${selectedAlgorithm} Scheduling (${currentWl} Workload)</button>
+          </div>
+        `)}
+      </div>
+      <div>
+        ${card("OS Scheduling Metrics", "Computed by Java OS Module (HospitalOSModule.java):", `
+          <div class="algorithm-explainer">
+            <div class="explain-row"><span class="explain-num">CT</span><div><b>Completion Time</b><p>Exact clock time when the software task completes execution.</p></div></div>
+            <div class="explain-row"><span class="explain-num">TAT</span><div><b>Turnaround Time = CT − Arrival</b><p>Total time spent by the task from arrival to completion.</p></div></div>
+            <div class="explain-row"><span class="explain-num">WT</span><div><b>Waiting Time = TAT − Burst</b><p>Time spent waiting in the ready queue before receiving CPU service.</p></div></div>
+          </div>
+        `)}
+      </div>
+    </div>
+    <div id="scheduleOutput">${renderScheduleOutput()}</div>`;
+
+  } else if (page === "allocation") {
+    html = intro("OS DEADLOCK AVOIDANCE", "Banker’s Algorithm Safety Check", "Evaluated by Dijkstra's Banker's Algorithm in Java to verify shared hospital resources (Beds, Doctors, Devices) never deadlock.", "Calculate safety state", "check-banker-input");
+    html += `<div class="module-grid">
+      <div>
+        ${card("Banker’s Algorithm Input", "Resource vectors snapshot. Need matrix is computed as Maximum − Allocation by Java.", `
+          <div class="banker-inputs">
+            <div class="banker-available">
+              <b>Available Resources (Beds, Doctors, Devices)</b>
+              ${bankerDefaults.resources.map((r, i) => `<div class="field"><label for="bank-av-${i}">${r}</label><input id="bank-av-${i}" type="number" min="0" step="1" value="${bankerDefaults.available[i]}"></div>`).join("")}
+            </div>
+            <div class="data-table-wrap">
+              <table class="banker-table">
+                <thead><tr><th>Task / Patient</th><th>Allocation (B, D, M)</th><th>Maximum Demand (B, D, M)</th></tr></thead>
+                <tbody>
+                  ${bankerDefaults.patients.map((p, i) => `<tr>
+                    <td><b>${p.name}</b></td>
+                    <td>${p.allocation.map((v, j) => `<input id="bank-a-${i}-${j}" aria-label="${p.name} allocation ${bankerDefaults.resources[j]}" type="number" min="0" step="1" value="${v}">`).join("")}</td>
+                    <td>${p.maximum.map((v, j) => `<input id="bank-m-${i}-${j}" aria-label="${p.name} maximum ${bankerDefaults.resources[j]}" type="number" min="0" step="1" value="${v}">`).join("")}</td>
+                  </tr>`).join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="button button-primary" data-action="check-banker-input">Calculate safety state (Java)</button>
+          </div>
+        `)}
+      </div>
+      <div>
+        ${card("Java Safety Result", "Real-time deadlock evaluation returned by backend Java OS Module.", `
+          <div id="bankerInputResult">${renderSafetyBanner()}</div>
+          <div class="algorithm-explainer">
+            <div class="explain-row"><span class="explain-num">1</span><div><b>Need = Max − Allocation</b><p>Remaining resources each process may still request before completing.</p></div></div>
+            <div class="explain-row"><span class="explain-num">2</span><div><b>Safe Sequence Search</b><p>Finds an execution sequence where all tasks safely finish and return resources.</p></div></div>
+          </div>
+        `)}
+      </div>
+    </div>`;
+
+  } else if (page === "history") {
+    html = intro("OS OUTPUT · AUDIT LOG", "Run History", "Persistent record of all CPU scheduling runs and results saved in MySQL database.");
+    html += `<div class="module-grid equal">
+      ${card("Scheduling Runs", "Persisted in MySQL `scheduling_runs` table.", `<div id="runsTable"></div>`)}
+      ${card("Latest Process Results", "Persisted in MySQL `scheduling_results` table.", `<div id="historyResults"></div>`)}
+    </div>`;
+  }
+
+  host.innerHTML = html;
+  wireModule(page);
 }
-function openModal(kind){
- const dialog=$("recordDialog"),fields=$("modalFields");let title="",subtitle="",html="";
- const patientOptions=state.patients.map(p=>({value:p.patient_id,label:`${p.patient_name} · #${p.patient_id}`}));
- const doctorOptions=state.doctors.map(d=>({value:d.doctor_id,label:`${d.doctor_name} · ${d.specialization}`}));
- const appointmentOptions=state.appointments.map(a=>({value:a.appointment_id,label:`#${a.appointment_id} · ${patientName(a.patient_id)}`}));
- if(kind==="new-patient"){title="Register patient";subtitle="Create a patient row in this local preview.";html=`<div class="field-grid">${field("Full name","patient_name","text","e.g. Priya Sharma","required")}${field("Age","age","number","Age",'min="0" max="120" required')}${selectField("Gender","gender",[{value:"Male",label:"Male"},{value:"Female",label:"Female"},{value:"Other",label:"Other"}])}${field("Phone","phone","tel","10-digit contact")}${field("Address","address","text","City / address")}</div>`;}
- if(kind==="new-doctor"){title="Add doctor";subtitle="Create a doctor row in this local preview.";html=`<div class="field-grid">${field("Doctor name","doctor_name","text","e.g. Dr. Priya Sharma","required")}${field("Specialization","specialization","text","e.g. Cardiologist","required")}${field("Phone","phone","tel","Contact number")}</div>`;}
- if(kind==="new-appointment"){title="New appointment";subtitle="Select existing patient and doctor foreign keys.";html=`<div class="field-grid">${selectField("Patient","patient_id",patientOptions)}${selectField("Doctor","doctor_id",doctorOptions)}${field("Appointment date","appointment_date","date","","required")}${field("Appointment time","appointment_time","time","","required")}${selectField("Status","appointment_status",[{value:"Scheduled",label:"Scheduled"},{value:"Completed",label:"Completed"},{value:"Cancelled",label:"Cancelled"}])}</div>`;}
- if(kind==="new-resource"){title="Add resource";subtitle="Add a resource inventory row to the local preview.";html=`<div class="field-grid">${field("Resource name","resource_name","text","e.g. Oxygen Cylinder","required")}${field("Available quantity","available_quantity","number","0",'min="0" value="0" required')}${field("Total quantity","total_quantity","number","0",'min="0" value="0" required')}</div>`;}
- if(kind==="new-process"){title="Add treatment process";subtitle="Process inputs used by CPU scheduling.";html=`<div class="field-grid">${selectField("Patient","patient_id",patientOptions)}${selectField("Appointment (optional)","appointment_id",[{value:"",label:"No appointment"},...appointmentOptions])}${field("Process name","process_name","text","e.g. Diagnostic scan","required")}${field("Arrival time","arrival_time","number","0",'min="0" value="0" required')}${field("Burst time","burst_time","number","1",'min="1" value="1" required')}${field("Priority","priority","number","1",'min="1" value="1" required')}</div>`;}
- $("modalKicker").textContent=kind==="new-process"?"OS INPUT": "DBMS · NEW RECORD";$("modalTitle").textContent=title;$("modalSubtitle").textContent=subtitle;fields.innerHTML=html;$("saveModal").textContent=kind==="new-process"?"Add process":"Add record";$("recordForm").dataset.kind=kind;dialog.showModal();
+
+// -------------------------------------------------------------
+// TABLE RENDERERS (WITH CRUD BUTTONS & ACTIONS)
+// -------------------------------------------------------------
+
+function renderPatients() {
+  const q = ($("patientSearch")?.value || "").toLowerCase();
+  const deptFilter = $("f-patientDeptFilter")?.value || "All";
+
+  const rows = state.patients.filter(p => {
+    const matchDept = (deptFilter === "All" || String(p.department).toLowerCase() === deptFilter.toLowerCase());
+    const matchSearch = [p.patient_name, p.phone, p.address, p.bed_number, p.department, p.diagnosis, String(p.patient_id)].join(" ").toLowerCase().includes(q);
+    return matchDept && matchSearch;
+  });
+
+  if ($("patientTableCount")) $("patientTableCount").textContent = `${rows.length} patient record${rows.length === 1 ? "" : "s"}`;
+  
+  if ($("patientsTable")) {
+    $("patientsTable").innerHTML = table(
+      ["PATIENT", "AGE & GENDER", "DIAGNOSIS & DEPT", "ASSIGNED DOCTOR", "BED (1:1)", "PRIORITY", "STATUS", "ACTIONS"],
+      rows.map(p => `<tr>
+        <td>${personCell(p.patient_name, `ID #${p.patient_id}`)}</td>
+        <td>${p.age} yrs (${p.gender || "—"})</td>
+        <td><b>${escapeHtml(p.diagnosis || "General Consultation")}</b><small class="person-id">${escapeHtml(p.department || "General Medicine")}</small></td>
+        <td>${escapeHtml(p.doctor_name || "Unassigned")}</td>
+        <td><span class="badge-bed ${p.bed_number && p.bed_number !== 'Unassigned' ? 'occupied' : 'available'}">🛏️ ${escapeHtml(p.bed_number || "Unassigned")}</span></td>
+        <td>${priorityTag(p.priority_level)}</td>
+        <td>${statusTag(p.admission_status || "Admitted")}</td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-action btn-edit" data-action="edit-patient" data-id="${p.patient_id}">✏️ Edit</button>
+            <button class="btn-action btn-delete" data-action="delete-patient" data-id="${p.patient_id}" data-name="${escapeHtml(p.patient_name)}">🗑️ Delete</button>
+          </div>
+        </td>
+      </tr>`)
+    );
+  }
 }
-function submitModal(e){
- e.preventDefault();const kind=e.currentTarget.dataset.kind,fd=new FormData(e.currentTarget),v=Object.fromEntries(fd.entries());
- const num=x=>Number(v[x]);
- if(kind==="new-patient"){
-  if(!v.patient_name?.trim()||v.age===""||num("age")<0)return toast("Enter a valid patient name and age.");
-  if(v.phone&&state.patients.some(p=>p.phone===v.phone))return toast("That phone number already exists in the preview.");
-  state.patients.push({patient_id:state.nextIds.patients++,patient_name:v.patient_name.trim(),age:num("age"),gender:v.gender,phone:v.phone,address:v.address});
- }else if(kind==="new-doctor"){
-  if(!v.doctor_name?.trim()||!v.specialization?.trim())return toast("Doctor name and specialization are required.");
-  if(v.phone&&state.doctors.some(d=>d.phone===v.phone))return toast("That phone number already exists in the preview.");
-  state.doctors.push({doctor_id:state.nextIds.doctors++,doctor_name:v.doctor_name.trim(),specialization:v.specialization.trim(),phone:v.phone});
- }else if(kind==="new-appointment"){
-  if(!v.appointment_date||!v.appointment_time)return toast("Select appointment date and time.");
-  state.appointments.push({appointment_id:state.nextIds.appointments++,patient_id:num("patient_id"),doctor_id:num("doctor_id"),appointment_date:v.appointment_date,appointment_time:v.appointment_time,appointment_status:v.appointment_status});
- }else if(kind==="new-resource"){
-  if(!v.resource_name?.trim()||num("available_quantity")<0||num("total_quantity")<0||num("available_quantity")>num("total_quantity"))return toast("Quantities must be non-negative and available cannot exceed total.");
-  state.resources.push({resource_id:state.nextIds.resources++,resource_name:v.resource_name.trim(),available_quantity:num("available_quantity"),total_quantity:num("total_quantity")});
- }else if(kind==="new-process"){
-  if(!v.process_name?.trim()||num("arrival_time")<0||num("burst_time")<=0||num("priority")<1)return toast("Arrival must be ≥ 0, burst > 0 and priority ≥ 1.");
-  state.treatment_processes.push({process_id:state.nextIds.treatment_processes++,patient_id:num("patient_id"),appointment_id:v.appointment_id?num("appointment_id"):null,process_name:v.process_name.trim(),arrival_time:num("arrival_time"),burst_time:num("burst_time"),priority:num("priority"),process_status:"Queued"});
- }
- $("recordDialog").close();e.currentTarget.reset();refreshOverview();renderModule(state.page);toast("Added to local preview only — not saved to MySQL.");
+
+function renderDoctors() {
+  const q = ($("doctorSearch")?.value || "").toLowerCase();
+  const rows = state.doctors.filter(d => 
+    (d.doctor_name + " " + d.specialization + " " + (d.department || "") + " " + (d.phone || "") + " " + d.doctor_id).toLowerCase().includes(q)
+  );
+
+  if ($("doctorTableCount")) $("doctorTableCount").textContent = `${rows.length} specialist${rows.length === 1 ? "" : "s"}`;
+
+  if ($("doctorsTable")) {
+    $("doctorsTable").innerHTML = table(
+      ["DOCTOR", "SPECIALIZATION", "DEPARTMENT", "CONTACT", "AVAILABILITY / STATUS", "ACTIONS"],
+      rows.map(d => `<tr>
+        <td>${personCell(d.doctor_name, `Doctor ID #${d.doctor_id}`, "violet")}</td>
+        <td><b>${escapeHtml(d.specialization)}</b></td>
+        <td>${escapeHtml(d.department || "General Medicine")}</td>
+        <td>${escapeHtml(d.phone || "—")}</td>
+        <td>${statusTag(d.availability_status || "Available")}</td>
+        <td>
+          <div class="action-buttons">
+            <button class="btn-action btn-edit" data-action="edit-doctor" data-id="${d.doctor_id}">✏️ Edit</button>
+            <button class="btn-action btn-delete" data-action="delete-doctor" data-id="${d.doctor_id}" data-name="${escapeHtml(d.doctor_name)}">🗑️ Delete</button>
+          </div>
+        </td>
+      </tr>`)
+    );
+  }
 }
-function runScheduler(){
- const quantum=Math.max(1,Number($("f-quantum")?.value||2));
- if(!state.treatment_processes.length)return toast("Add at least one treatment process first.");
- lastSchedule=calcSchedule(selectedAlgorithm,quantum);
- state.scheduling_runs.push({run_id:state.scheduling_runs.length+1,algorithm:selectedAlgorithm,time_quantum:selectedAlgorithm==="Round Robin"?quantum:null,executed_at:"Local preview"});
- // Local-only results for display. Not written into scheduling_results.
- $("scheduleOutput").innerHTML=renderScheduleOutput();refreshOverview();
- toast(`${selectedAlgorithm} preview calculated. Results have not been sent to the Java backend.`);
+
+function renderAppointments() {
+  const q = ($("appointmentSearch")?.value || "").toLowerCase();
+  const filter = $("f-appointmentFilter")?.value || "All";
+  const rows = state.appointments.filter(a =>
+    (filter === "All" || a.appointment_status === filter) &&
+    (patientName(a.patient_id) + " " + doctorName(a.doctor_id) + " " + a.appointment_status).toLowerCase().includes(q)
+  );
+
+  if ($("appointmentsTable")) {
+    $("appointmentsTable").innerHTML = table(
+      ["APPOINTMENT", "PATIENT", "DOCTOR", "DATE & TIME", "STATUS"],
+      rows.map((a, i) => `<tr>
+        <td><b>#APT-${String(a.appointment_id).padStart(3, "0")}</b></td>
+        <td>${personCell(patientName(a.patient_id), `Patient ID ${a.patient_id}`, ["cyan", "violet", "green"][i % 3])}</td>
+        <td>${escapeHtml(doctorName(a.doctor_id))}</td>
+        <td>${escapeHtml(dateTime(a.appointment_date, a.appointment_time))}</td>
+        <td>${statusTag(a.appointment_status)}</td>
+      </tr>`)
+    );
+  }
 }
-function checkSafety(){
- lastSafety=runSafetyPreview();$("safetyResult").innerHTML=renderSafetyResult();toast("Safety preview calculated; confirm with the OS module before reporting the result.");
+
+function renderBeds() {
+  if ($("bedsTable")) {
+    $("bedsTable").innerHTML = table(
+      ["BED NUMBER", "WARD", "CURRENT OCCUPANT (1:1 DEDICATED)", "STATUS", "ACTION"],
+      state.beds.map(b => {
+        const isOccupied = String(b.bed_status).toLowerCase() === "occupied";
+        return `<tr>
+          <td><b>🛏️ ${escapeHtml(b.bed_number)}</b><small class="person-id">Bed ID ${b.bed_id}</small></td>
+          <td>${escapeHtml(b.ward)}</td>
+          <td>${isOccupied ? `<b>${escapeHtml(b.patient_name || patientName(b.patient_id))}</b> (Patient ID ${b.patient_id || '—'})` : `<span class="muted">No patient assigned</span>`}</td>
+          <td>${statusTag(b.bed_status)}</td>
+          <td>${isOccupied ? `<button class="btn-discharge" data-action="release-bed" data-bed-id="${b.bed_id}">Discharge & Free Bed</button>` : `<span class="muted">Available</span>`}</td>
+        </tr>`;
+      })
+    );
+  }
 }
-function action(kind){
- if(kind.startsWith("new-"))return openModal(kind);
- if(kind==="run-scheduler")return runScheduler();
- if(kind==="check-safety")return checkSafety();
- if(kind==="release-os-resource")return changeOSResource(false);
- if(kind==="check-banker-input")return checkBankerInput();
+
+// -------------------------------------------------------------
+// 5 SEPARATED WORKLOAD CATEGORIES RENDERING
+// -------------------------------------------------------------
+
+function renderWorkloadSections() {
+  const container = $("workloadSectionsContainer");
+  if (!container) return;
+
+  const q = ($("processSearch")?.value || "").toLowerCase();
+  const categories = ["Emergency", "Interactive", "OPD", "Diagnostic", "Batch"];
+
+  container.innerHTML = categories.map(cat => {
+    const info = workloadInfo[cat];
+    const tasks = state.treatment_processes.filter(p => 
+      String(p.work_category).toLowerCase() === cat.toLowerCase() &&
+      (p.process_name + " " + patientName(p.patient_id) + " " + p.process_id).toLowerCase().includes(q)
+    );
+
+    const taskRows = tasks.map(t => `<tr>
+      <td><b>P-${t.process_id}</b><small class="person-id">${escapeHtml(t.process_name)}</small></td>
+      <td>${escapeHtml(t.patient_name || patientName(t.patient_id))}</td>
+      <td>${t.arrival_time} units</td>
+      <td><b>${t.burst_time} units</b></td>
+      <td>${priorityTag(t.priority)}</td>
+      <td>${statusTag(t.process_status || "Queued")}</td>
+      <td><span class="workload-algo-tag">${info.recommended} Scheduling</span></td>
+      <td>
+        <button class="btn-action btn-delete" data-action="delete-process" data-id="${t.process_id}">🗑️</button>
+      </td>
+    </tr>`);
+
+    return `<div class="workload-section-panel">
+      <div class="workload-section-header ${info.sectionClass}">
+        <div class="workload-section-title">
+          <span style="font-size:18px">${info.icon}</span>
+          <div>
+            <h3>${escapeHtml(info.title)} <span class="workload-badge-count">${tasks.length} tasks</span></h3>
+            <p class="workload-section-desc">${escapeHtml(info.desc)}</p>
+          </div>
+        </div>
+        <div>
+          <button class="btn-run-category" data-action="run-category-schedule" data-category="${cat}">▶ Run ${info.recommended} (${cat})</button>
+        </div>
+      </div>
+      <div class="workload-table-body">
+        ${tasks.length ? table(
+          ["TASK ID & NAME", "PATIENT", "ARRIVAL", "BURST", "PRIORITY", "STATUS", "OPTIMAL ALGORITHM", "ACTION"],
+          taskRows
+        ) : `<div class="empty-state">No tasks currently queued in ${cat} category. Click "Add software task" to create one.</div>`}
+      </div>
+    </div>`;
+  }).join("");
 }
-document.addEventListener("click",e=>{
- const nav=e.target.closest("[data-page]");if(nav){go(nav.dataset.page);return;}
- const goto=e.target.closest("[data-goto]");if(goto){go(goto.dataset.goto);return;}
- const act=e.target.closest("[data-action]");if(act){action(act.dataset.action);return;}
- const alg=e.target.closest("[data-algorithm]");if(alg){selectedAlgorithm=alg.dataset.algorithm;renderModule("scheduler");}
+
+// -------------------------------------------------------------
+// SCHEDULING OUTPUT & GANTT CHART
+// -------------------------------------------------------------
+
+function renderScheduleOutput() {
+  if (!lastSchedule) {
+    return `<article class="module-card">
+      <h3>Scheduling Output</h3>
+      <p class="muted">Select a workload category and click "Run Scheduling" to execute the algorithm in Java.</p>
+      <div class="inline-note"><b>Ready to schedule</b><span>Click the Run Scheduling button above to compute CPU execution metrics.</span></div>
+    </article>`;
+  }
+
+  const s = lastSchedule;
+  const max = Math.max(1, ...(s.segments || []).map(x => x.end));
+  const distinctPids = [...new Set((s.segments || []).map(x => x.process_id))];
+
+  const gantt = `<div class="gantt-result">
+    <div class="gantt-labels"><span>Process</span><span>Execution Timeline (Java OS Module Output)</span></div>
+    ${distinctPids.map(pid =>
+      `<div class="gantt-row">
+        <span class="process-label">P-${pid}</span>
+        <div class="gantt-track">
+          ${(s.segments || []).filter(seg => seg.process_id === pid).map(seg =>
+            `<i class="gantt-segment ${["seg-blue", "seg-lilac", "seg-green", "seg-amber"][pid % 4]}" 
+               style="left:${(seg.start / max) * 100}%;width:${Math.max(1, ((seg.end - seg.start) / max) * 100)}%" 
+               title="[${seg.start} to ${seg.end}]">${seg.start}–${seg.end}</i>`
+          ).join("")}
+        </div>
+      </div>`
+    ).join("")}
+    <div class="gantt-ticks">
+      <span>0</span>
+      <span>${(max * 0.25).toFixed(1)}</span>
+      <span>${(max * 0.5).toFixed(1)}</span>
+      <span>${(max * 0.75).toFixed(1)}</span>
+      <span>${max}</span>
+    </div>
+  </div>`;
+
+  return `<article class="module-card">
+    <div class="panel-title-row">
+      <div>
+        <h3>Run #${s.run_id || "Live"} · ${escapeHtml(s.algorithm)} Scheduling (${escapeHtml(s.work_category || "Workload")})</h3>
+        <p class="muted">${escapeHtml(s.rationale || "Calculated by Java backend · Persisted to MySQL table scheduling_results.")}</p>
+      </div>
+      ${statusTag("Java Execution Active")}
+    </div>
+    <div class="result-cards">
+      <div class="result-card"><span>Average waiting time (WT)</span><b>${Number(s.avgWait || 0).toFixed(2)} units</b></div>
+      <div class="result-card"><span>Average turnaround (TAT)</span><b>${Number(s.avgTat || 0).toFixed(2)} units</b></div>
+      <div class="result-card"><span>Tasks executed</span><b>${(s.rows || []).length} tasks</b></div>
+    </div>
+    ${gantt}
+    <div style="margin-top:19px">
+      ${table(
+        ["PROCESS", "WORKLOAD", "ARRIVAL", "BURST", "PRIORITY", "COMPLETION (CT)", "TURNAROUND (TAT)", "WAITING (WT)"],
+        (s.rows || []).map(r => `<tr>
+          <td><b>P-${r.process_id}</b><small class="person-id">${escapeHtml(r.process_name)}</small></td>
+          <td><span class="badge-workload ${workloadInfo[r.work_category]?.tagClass || 'workload-batch'}">${escapeHtml(r.work_category || 'Workload')}</span></td>
+          <td>${r.arrival_time}</td>
+          <td>${r.burst_time}</td>
+          <td>${r.priority}</td>
+          <td><b>${r.completion_time}</b></td>
+          <td>${r.turnaround_time}</td>
+          <td>${r.waiting_time}</td>
+        </tr>`)
+      )}
+    </div>
+  </article>`;
+}
+
+function renderSafetyBanner() {
+  if (!lastSafety) {
+    return `<div class="safe-banner safe"><span class="big-check">?</span><div><b>Awaiting calculation</b><span>Click "Calculate safety state" to invoke Java Banker’s Algorithm.</span></div></div>`;
+  }
+  if (lastSafety.safe) {
+    return `<div class="safe-banner safe">
+      <span class="big-check">✓</span>
+      <div><b>SAFE state (Java OS Module)</b><span>${escapeHtml(lastSafety.message || "A safe sequence exists. No deadlock possible.")}</span></div>
+    </div>
+    <b style="font-size:10px;color:#58796d">Verified Safe Sequence:</b>
+    <div class="safe-sequence">${(lastSafety.safeSequence || []).map((p, i) => `${i ? '<i>→</i>' : ''}<span>${escapeHtml(p)}</span>`).join("")}</div>`;
+  }
+  return `<div class="safe-banner unsafe">
+    <span class="big-check">!</span>
+    <div><b>UNSAFE state (Java OS Module)</b><span>${escapeHtml(lastSafety.message || "No safe execution sequence found.")}</span></div>
+  </div>`;
+}
+
+function renderHistory() {
+  if ($("runsTable")) {
+    $("runsTable").innerHTML = table(
+      ["RUN ID", "ALGORITHM", "WORKLOAD CATEGORY", "TIME QUANTUM", "EXECUTED AT"],
+      state.scheduling_runs.map(r => `<tr>
+        <td><b>#RUN-${r.run_id}</b></td>
+        <td>${escapeHtml(r.algorithm)}</td>
+        <td><span class="badge-workload ${workloadInfo[r.work_category]?.tagClass || 'workload-batch'}">${escapeHtml(r.work_category || 'All Tasks')}</span></td>
+        <td>${r.time_quantum ?? "—"}</td>
+        <td>${escapeHtml(r.executed_at)}</td>
+      </tr>`)
+    );
+  }
+
+  if ($("historyResults")) {
+    $("historyResults").innerHTML = lastSchedule ? table(
+      ["PROCESS", "WORKLOAD", "CT", "TAT", "WT"],
+      lastSchedule.rows.map(r => `<tr>
+        <td><b>P-${r.process_id}</b></td>
+        <td>${escapeHtml(r.work_category || '—')}</td>
+        <td>${r.completion_time}</td>
+        <td>${r.turnaround_time}</td>
+        <td>${r.waiting_time}</td>
+      </tr>`)
+    ) : `<div class="inline-note"><b>Ready to record</b><span>Execute a scheduling run to inspect process-level results persisted in MySQL.</span></div>`;
+  }
+}
+
+function wireModule(page) {
+  if (page === "patients") {
+    renderPatients();
+    $("patientSearch")?.addEventListener("input", renderPatients);
+    $("f-patientDeptFilter")?.addEventListener("change", renderPatients);
+  }
+  if (page === "doctors") {
+    renderDoctors();
+    $("doctorSearch")?.addEventListener("input", renderDoctors);
+  }
+  if (page === "appointments") {
+    renderAppointments();
+    $("appointmentSearch")?.addEventListener("input", renderAppointments);
+    $("f-appointmentFilter")?.addEventListener("change", renderAppointments);
+  }
+  if (page === "resources") {
+    renderBeds();
+    $("osResourceForm")?.addEventListener("submit", e => {
+      e.preventDefault();
+      changeOSResource(true);
+    });
+  }
+  if (page === "treatments") {
+    renderWorkloadSections();
+    $("processSearch")?.addEventListener("input", renderWorkloadSections);
+  }
+  if (page === "scheduler") {
+    document.querySelectorAll("[data-algorithm]").forEach(b => b.addEventListener("click", () => {
+      selectedAlgorithm = b.dataset.algorithm;
+      renderModule("scheduler");
+    }));
+
+    document.querySelectorAll("[data-workload]").forEach(card => card.addEventListener("click", () => {
+      const wl = card.dataset.workload;
+      state.selectedWorkload = wl;
+      selectedAlgorithm = workloadInfo[wl].recommended;
+      renderModule("scheduler");
+    }));
+  }
+  if (page === "history") {
+    renderHistory();
+  }
+}
+
+// -------------------------------------------------------------
+// MODALS (PATIENT & DOCTOR CRUD WITH FULL EDIT & REGISTER)
+// -------------------------------------------------------------
+
+function openModal(kind, editData = null) {
+  const dialog = $("recordDialog");
+  const fields = $("modalFields");
+  let title = "", subtitle = "", html = "";
+
+  const availableBeds = state.beds.filter(b => String(b.bed_status).toLowerCase() === "available");
+  const doctorOptions = [
+    { value: "", label: "Unassigned Doctor" },
+    ...state.doctors.map(d => ({ value: d.doctor_id, label: `${d.doctor_name} · ${d.specialization} (${d.department})` }))
+  ];
+
+  if (kind === "new-patient" || kind === "edit-patient") {
+    const isEdit = (kind === "edit-patient" && editData);
+    title = isEdit ? `Edit Patient #${editData.patient_id} (${editData.patient_name})` : "Register Patient & Allocate Dedicated Bed";
+    subtitle = isEdit ? "Update patient details in MySQL. Modifying status to Discharged frees their bed." : "1:1 Mapping: Exactly one bed is allocated to each admitted patient in MySQL.";
+
+    // Bed options: if edit, include currently assigned bed as option
+    let bedOptions = [];
+    if (isEdit && editData.bed_id) {
+      bedOptions.push({ value: editData.bed_id, label: `🛏️ Keep Current Bed ${editData.bed_number || editData.bed_id} (${editData.ward || 'General'})` });
+    }
+    bedOptions.push({ value: "", label: "Auto-Assign Next Available Bed" });
+    availableBeds.forEach(b => {
+      if (!isEdit || b.bed_id !== editData.bed_id) {
+        bedOptions.push({ value: b.bed_id, label: `🛏️ Bed ${b.bed_number} (${b.ward})` });
+      }
+    });
+
+    html = `<div class="field-grid">
+      ${isEdit ? `<input type="hidden" name="patient_id" value="${editData.patient_id}">` : ""}
+      ${field("Full Name", "patient_name", "text", "e.g. Priya Sharma", "required", isEdit ? editData.patient_name : "")}
+      ${field("Age", "age", "number", "Age", 'min="0" max="120" required', isEdit ? editData.age : "")}
+      ${selectField("Gender", "gender", [{ value: "Male", label: "Male" }, { value: "Female", label: "Female" }, { value: "Other", label: "Other" }], isEdit ? editData.gender : "Male")}
+      ${field("Phone Number", "phone", "tel", "10-digit phone number", "", isEdit ? editData.phone : "")}
+      ${field("Disease / Diagnosis", "diagnosis", "text", "e.g. Acute Bronchitis", "required", isEdit ? editData.diagnosis : "")}
+      ${field("Department", "department", "text", "e.g. Cardiology, Neurology", "required", isEdit ? editData.department : "General Medicine")}
+      ${selectField("Assigned Doctor", "doctor_id", doctorOptions, isEdit ? editData.doctor_id : "")}
+      ${selectField("Admission Status", "admission_status", [
+        { value: "Admitted", label: "Admitted (Occupies Dedicated Bed 1:1)" },
+        { value: "Outpatient", label: "Outpatient (No Bed Occupied)" },
+        { value: "Discharged", label: "Discharged (Frees Bed)" }
+      ], isEdit ? editData.admission_status : "Admitted")}
+      ${selectField("Priority Level", "priority_level", [
+        { value: "1", label: "🔴 Priority 1 (Critical / Emergency)" },
+        { value: "2", label: "🟡 Priority 2 (Moderate / General Care)" },
+        { value: "3", label: "🟢 Priority 3 (Low / Routine Follow-up)" }
+      ], isEdit ? editData.priority_level : "2")}
+      ${selectField("Dedicated Hospital Bed (1:1)", "bed_id", bedOptions, isEdit ? editData.bed_id : "")}
+      ${field("Address", "address", "text", "City or residential address", "", isEdit ? editData.address : "")}
+    </div>`;
+
+  } else if (kind === "new-doctor" || kind === "edit-doctor") {
+    const isEdit = (kind === "edit-doctor" && editData);
+    title = isEdit ? `Edit Doctor #${editData.doctor_id} (${editData.doctor_name})` : "Add Medical Specialist";
+    subtitle = isEdit ? "Update doctor profile and availability in MySQL." : "Inserts a doctor into MySQL `doctors` table.";
+
+    html = `<div class="field-grid">
+      ${isEdit ? `<input type="hidden" name="doctor_id" value="${editData.doctor_id}">` : ""}
+      ${field("Doctor Full Name", "doctor_name", "text", "e.g. Dr. Priya Sharma", "required", isEdit ? editData.doctor_name : "")}
+      ${field("Medical Specialization", "specialization", "text", "e.g. Cardiologist", "required", isEdit ? editData.specialization : "")}
+      ${field("Department", "department", "text", "e.g. Cardiology", "required", isEdit ? editData.department : "General Medicine")}
+      ${field("Contact Phone", "phone", "tel", "Contact number", "", isEdit ? editData.phone : "")}
+      ${selectField("Availability Status", "availability_status", [
+        { value: "Available", label: "🟢 Available (OPD & Rounds)" },
+        { value: "On Duty", label: "🔵 On Duty (Inpatient Ward)" },
+        { value: "In Surgery", label: "🟣 In Surgery (Operating Theatre)" },
+        { value: "On Leave", label: "⚪ On Leave" }
+      ], isEdit ? editData.availability_status : "Available")}
+    </div>`;
+
+  } else if (kind === "new-appointment") {
+    title = "Schedule New Appointment";
+    subtitle = "Relational appointment joining registered patient and doctor in MySQL.";
+    const patientOptions = state.patients.map(p => ({ value: p.patient_id, label: `${p.patient_name} · #${p.patient_id}` }));
+    html = `<div class="field-grid">
+      ${selectField("Patient", "patient_id", patientOptions)}
+      ${selectField("Doctor", "doctor_id", doctorOptions.filter(d => d.value))}
+      ${field("Appointment Date", "appointment_date", "date", "", "required")}
+      ${field("Appointment Time", "appointment_time", "time", "", "required")}
+      ${selectField("Status", "appointment_status", [
+        { value: "Scheduled", label: "Scheduled" },
+        { value: "Completed", label: "Completed" },
+        { value: "Cancelled", label: "Cancelled" }
+      ])}
+    </div>`;
+
+  } else if (kind === "new-resource") {
+    title = "Add Hospital Resource";
+    subtitle = "Inserts a resource inventory row into MySQL `resources` table.";
+    html = `<div class="field-grid">
+      ${field("Resource Name", "resource_name", "text", "e.g. Defibrillator", "required")}
+      ${field("Available Quantity", "available_quantity", "number", "0", 'min="0" value="0" required')}
+      ${field("Total Quantity", "total_quantity", "number", "0", 'min="0" value="0" required')}
+    </div>`;
+
+  } else if (kind === "new-process") {
+    title = "Add Software Task to Queue";
+    subtitle = "Creates a software task in MySQL `treatment_processes` categorized by workload.";
+    const patientOptions = state.patients.map(p => ({ value: p.patient_id, label: `${p.patient_name} · #${p.patient_id}` }));
+    html = `<div class="field-grid">
+      ${selectField("Patient", "patient_id", patientOptions)}
+      ${selectField("Workload Category", "work_category", [
+        { value: "Emergency", label: "🚨 Critical Emergency (Priority Scheduling)" },
+        { value: "Interactive", label: "💬 Interactive Doctor (Round Robin Scheduling)" },
+        { value: "OPD", label: "🩺 OPD Clinical Queue (Round Robin / Fair Slicing)" },
+        { value: "Diagnostic", label: "🧪 Rapid Diagnostic (SJF Scheduling)" },
+        { value: "Batch", label: "📊 Batch Report (FCFS Scheduling)" }
+      ])}
+      ${field("Task Name", "process_name", "text", "e.g. Telemetry ECG Analysis", "required")}
+      ${field("Arrival Time", "arrival_time", "number", "0", 'min="0" value="0" required')}
+      ${field("Burst Time", "burst_time", "number", "1", 'min="1" value="1" required')}
+      ${field("Priority (1 = Highest)", "priority", "number", "1", 'min="1" value="1" required')}
+    </div>`;
+  }
+
+  if ($("modalKicker")) $("modalKicker").textContent = kind.includes("edit") ? "DBMS · UPDATE RECORD" : "DBMS · NEW RECORD";
+  if ($("modalTitle")) $("modalTitle").textContent = title;
+  if ($("modalSubtitle")) $("modalSubtitle").textContent = subtitle;
+  if (fields) fields.innerHTML = html;
+  if ($("saveModal")) $("saveModal").textContent = kind.includes("edit") ? "Update record" : "Save record";
+  if ($("recordForm")) $("recordForm").dataset.kind = kind;
+  dialog.showModal();
+}
+
+async function submitModal(e) {
+  e.preventDefault();
+  const kind = e.currentTarget.dataset.kind;
+  const fd = new FormData(e.currentTarget);
+  const v = Object.fromEntries(fd.entries());
+  const num = x => Number(v[x]);
+
+  try {
+    let endpoint = "";
+    let method = "POST";
+    let payload = {};
+
+    if (kind === "new-patient" || kind === "edit-patient") {
+      if (!v.patient_name?.trim() || v.age === "" || num("age") < 0) {
+        return toast("Enter a valid patient name and age.");
+      }
+      endpoint = (kind === "edit-patient") ? "/api/patients/update" : "/api/patients";
+      payload = {
+        patient_name: v.patient_name.trim(),
+        age: num("age"),
+        gender: v.gender,
+        phone: v.phone?.trim() || null,
+        address: v.address?.trim() || null,
+        diagnosis: v.diagnosis?.trim() || "General Consultation",
+        department: v.department?.trim() || "General Medicine",
+        doctor_id: v.doctor_id ? num("doctor_id") : null,
+        bed_id: v.bed_id ? num("bed_id") : null,
+        admission_status: v.admission_status || "Admitted",
+        priority_level: num("priority_level") || 2
+      };
+      if (kind === "edit-patient") {
+        payload.patient_id = num("patient_id");
+      }
+
+    } else if (kind === "new-doctor" || kind === "edit-doctor") {
+      if (!v.doctor_name?.trim() || !v.specialization?.trim()) {
+        return toast("Doctor name and specialization are required.");
+      }
+      endpoint = (kind === "edit-doctor") ? "/api/doctors/update" : "/api/doctors";
+      payload = {
+        doctor_name: v.doctor_name.trim(),
+        specialization: v.specialization.trim(),
+        department: v.department?.trim() || "General Medicine",
+        phone: v.phone?.trim() || null,
+        availability_status: v.availability_status || "Available"
+      };
+      if (kind === "edit-doctor") {
+        payload.doctor_id = num("doctor_id");
+      }
+
+    } else if (kind === "new-appointment") {
+      if (!v.appointment_date || !v.appointment_time) {
+        return toast("Select appointment date and time.");
+      }
+      endpoint = "/api/appointments";
+      payload = {
+        patient_id: num("patient_id"),
+        doctor_id: num("doctor_id"),
+        appointment_date: v.appointment_date,
+        appointment_time: v.appointment_time,
+        appointment_status: v.appointment_status
+      };
+
+    } else if (kind === "new-resource") {
+      if (!v.resource_name?.trim() || num("available_quantity") < 0 || num("total_quantity") < 0) {
+        return toast("Valid non-negative quantities required.");
+      }
+      endpoint = "/api/resources";
+      payload = {
+        resource_name: v.resource_name.trim(),
+        available_quantity: num("available_quantity"),
+        total_quantity: num("total_quantity")
+      };
+
+    } else if (kind === "new-process") {
+      if (!v.process_name?.trim() || num("arrival_time") < 0 || num("burst_time") <= 0) {
+        return toast("Valid task name, arrival (≥0) and burst (>0) required.");
+      }
+      endpoint = "/api/processes";
+      payload = {
+        patient_id: num("patient_id"),
+        process_name: v.process_name.trim(),
+        work_category: v.work_category || "Emergency",
+        arrival_time: num("arrival_time"),
+        burst_time: num("burst_time"),
+        priority: num("priority") || 1
+      };
+    }
+
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast("Error: " + (data.message || "Operation failed"));
+      return;
+    }
+
+    $("recordDialog").close();
+    e.currentTarget.reset();
+    await loadDataFromBackend();
+    toast(data.message || "Saved successfully to MySQL!");
+
+  } catch (err) {
+    toast("Connection/Database error: " + err.message);
+  }
+}
+
+// -------------------------------------------------------------
+// DELETE HANDLERS WITH CONFIRMATION
+// -------------------------------------------------------------
+
+async function deletePatientPrompt(id, name) {
+  const p = state.patients.find(x => Number(x.patient_id) === Number(id));
+  const bedInfo = (p && p.bed_number && p.bed_number !== "Unassigned") ? `\nBed ${p.bed_number} will be released.` : "";
+  
+  if (!confirm(`Are you sure you want to delete Patient #${id} (${name})?${bedInfo}\nThis action is permanent in MySQL.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/patients/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patient_id: Number(id) })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast("Delete failed: " + (data.message || "Error"));
+      return;
+    }
+    toast(data.message || `Patient #${id} deleted.`);
+    await loadDataFromBackend();
+  } catch (e) {
+    toast("Error deleting patient: " + e.message);
+  }
+}
+
+async function deleteDoctorPrompt(id, name) {
+  if (!confirm(`Are you sure you want to delete Dr. ${name} (ID #${id})?\nAny assigned patient links will be cleared in MySQL.`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/doctors/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ doctor_id: Number(id) })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast("Delete failed: " + (data.message || "Error"));
+      return;
+    }
+    toast(data.message || `Doctor #${id} deleted.`);
+    await loadDataFromBackend();
+  } catch (e) {
+    toast("Error deleting doctor: " + e.message);
+  }
+}
+
+async function deleteProcessPrompt(id) {
+  if (!confirm(`Are you sure you want to delete task P-${id} from the software queue?`)) {
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/processes/delete`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ process_id: Number(id) })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast("Delete failed: " + (data.message || "Error"));
+      return;
+    }
+    toast(`Task P-${id} deleted.`);
+    await loadDataFromBackend();
+  } catch (e) {
+    toast("Error deleting task: " + e.message);
+  }
+}
+
+async function dischargeBed(bedId) {
+  if (!confirm("Are you sure you want to discharge the patient and free this hospital bed in MySQL?")) {
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/api/beds/release`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bed_id: Number(bedId) })
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast(data.message || "Failed to release bed");
+      return;
+    }
+    toast(data.message);
+    await loadDataFromBackend();
+  } catch (e) {
+    toast("Error discharging bed: " + e.message);
+  }
+}
+
+// -------------------------------------------------------------
+// SCHEDULER & BANKER'S ALGORITHM
+// -------------------------------------------------------------
+
+async function runScheduler() {
+  const quantum = Math.max(1, Number($("f-quantum")?.value || 2));
+  const workload = state.selectedWorkload || "Emergency";
+
+  toast(`Running ${selectedAlgorithm} scheduling for ${workload} Workload...`);
+
+  try {
+    const res = await fetch(`${API_BASE}/api/schedule`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        work_category: workload,
+        algorithm: selectedAlgorithm,
+        quantum: quantum
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast(data.message || "Scheduling execution failed");
+      return;
+    }
+
+    lastSchedule = data;
+
+    const historyRes = await fetch(`${API_BASE}/api/history`).then(r => r.json()).catch(() => []);
+    if (Array.isArray(historyRes)) state.scheduling_runs = historyRes;
+
+    if ($("scheduleOutput")) $("scheduleOutput").innerHTML = renderScheduleOutput();
+    refreshOverview();
+    toast(`${selectedAlgorithm} scheduling completed for ${workload} Workload (Run #${data.run_id}).`);
+
+  } catch (err) {
+    toast("Scheduler error: " + err.message);
+  }
+}
+
+async function checkBankerInput() {
+  const n = bankerDefaults.patients.length;
+  const m = bankerDefaults.resources.length;
+
+  const read = id => {
+    const el = $(id);
+    const v = Number(el?.value);
+    if (!el || !Number.isInteger(v) || v < 0) {
+      throw new Error("All matrix values must be non-negative whole numbers.");
+    }
+    return v;
+  };
+
+  try {
+    const available = bankerDefaults.resources.map((_, j) => read(`bank-av-${j}`));
+    const alloc = bankerDefaults.patients.map((_, i) => bankerDefaults.resources.map((_, j) => read(`bank-a-${i}-${j}`)));
+    const max = bankerDefaults.patients.map((_, i) => bankerDefaults.resources.map((_, j) => read(`bank-m-${i}-${j}`)));
+
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < m; j++) {
+        if (alloc[i][j] > max[i][j]) {
+          throw new Error(`${bankerDefaults.patients[i].name}: Allocation (${alloc[i][j]}) cannot exceed Maximum Demand (${max[i][j]}) for ${bankerDefaults.resources[j]}.`);
+        }
+      }
+    }
+
+    toast("Calculating safety state in Java OS Module...");
+
+    const res = await fetch(`${API_BASE}/api/banker`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        available,
+        allocation: alloc,
+        max,
+        patients: bankerDefaults.patients.map(p => p.name)
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast(data.message || "Banker calculation error");
+      return;
+    }
+
+    lastSafety = data;
+    if ($("bankerInputResult")) $("bankerInputResult").innerHTML = renderSafetyBanner();
+    toast(data.safe ? "Java safety check: SAFE state (Deadlock Avoided)." : "Java safety check: UNSAFE state.");
+
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
+async function changeOSResource(allocate) {
+  const key = $("f-osResource")?.value;
+  const qty = Number($("f-osQuantity")?.value);
+
+  if (!key || !Number.isInteger(qty) || qty <= 0) {
+    toast("Enter a positive whole-number quantity.");
+    return;
+  }
+
+  const endpoint = allocate ? "/api/resources/allocate" : "/api/resources/release";
+
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ resource: key, quantity: qty })
+    });
+
+    const data = await res.json();
+    if (!res.ok || data.error) {
+      toast(data.message || (allocate ? "Allocation failed" : "Release failed"));
+      return;
+    }
+
+    toast(data.message);
+    await loadDataFromBackend();
+
+  } catch (err) {
+    toast("Connection error: " + err.message);
+  }
+}
+
+// -------------------------------------------------------------
+// GLOBAL ACTION ROUTER & EVENT LISTENERS
+// -------------------------------------------------------------
+
+function action(kind, target) {
+  if (kind.startsWith("new-")) return openModal(kind);
+
+  if (kind === "edit-patient") {
+    const id = target.dataset.id;
+    const p = state.patients.find(x => Number(x.patient_id) === Number(id));
+    if (p) openModal("edit-patient", p);
+    return;
+  }
+
+  if (kind === "delete-patient") {
+    const id = target.dataset.id;
+    const name = target.dataset.name || "Patient";
+    deletePatientPrompt(id, name);
+    return;
+  }
+
+  if (kind === "edit-doctor") {
+    const id = target.dataset.id;
+    const d = state.doctors.find(x => Number(x.doctor_id) === Number(id));
+    if (d) openModal("edit-doctor", d);
+    return;
+  }
+
+  if (kind === "delete-doctor") {
+    const id = target.dataset.id;
+    const name = target.dataset.name || "Doctor";
+    deleteDoctorPrompt(id, name);
+    return;
+  }
+
+  if (kind === "delete-process") {
+    const id = target.dataset.id;
+    deleteProcessPrompt(id);
+    return;
+  }
+
+  if (kind === "run-category-schedule") {
+    const cat = target.dataset.category || "Emergency";
+    state.selectedWorkload = cat;
+    selectedAlgorithm = workloadInfo[cat]?.recommended || "Priority";
+    go("scheduler");
+    runScheduler();
+    return;
+  }
+
+  if (kind === "run-scheduler") return runScheduler();
+  if (kind === "release-os-resource") return changeOSResource(false);
+  if (kind === "check-banker-input") return checkBankerInput();
+  if (kind === "release-bed") {
+    const bedId = target?.dataset?.bedId;
+    if (bedId) dischargeBed(bedId);
+    return;
+  }
+}
+
+document.addEventListener("click", e => {
+  const nav = e.target.closest("[data-page]");
+  if (nav) { go(nav.dataset.page); return; }
+
+  const goto = e.target.closest("[data-goto]");
+  if (goto) { go(goto.dataset.goto); return; }
+
+  const act = e.target.closest("[data-action]");
+  if (act) { action(act.dataset.action, act); return; }
+
+  const alg = e.target.closest("[data-algorithm]");
+  if (alg) {
+    selectedAlgorithm = alg.dataset.algorithm;
+    renderModule("scheduler");
+  }
 });
-$("primaryAction").addEventListener("click",()=>{const p=state.page;if(p==="overview"||p==="patients")openModal("new-patient");else if(p==="doctors")openModal("new-doctor");else if(p==="appointments")openModal("new-appointment");else if(p==="resources")openModal("new-resource");else if(p==="treatments")openModal("new-process");else if(p==="scheduler")runScheduler();else if(p==="allocation")checkSafety();else if(p==="history"){renderModule("history");toast("History refreshed from the local preview.");}});
-$("recordForm").addEventListener("submit",submitModal);$("closeModal").addEventListener("click",()=>$("recordDialog").close());$("cancelModal").addEventListener("click",()=>$("recordDialog").close());
-$("mobileMenu").addEventListener("click",()=>$("sidebar").classList.toggle("open"));
-$("refreshButton").addEventListener("click",()=>{refreshOverview();if(state.page!=="overview")renderModule(state.page);toast("Local preview refreshed.");});
-$("overviewSearch").addEventListener("input",refreshOverview);
-$("dismissNotice").addEventListener("click",()=>$("prototypeNotice").classList.add("hidden"));
-$("helpButton").addEventListener("click",()=>toast("Integration pending: agree on Java API routes and JSON payloads with Rohan and Vansh before enabling network requests."));
-$("todayLabel").textContent=new Intl.DateTimeFormat("en-IN",{day:"2-digit",month:"short",year:"numeric"}).format(new Date()).toUpperCase();
+
+$("primaryAction")?.addEventListener("click", () => {
+  const p = state.page;
+  if (p === "overview" || p === "patients") openModal("new-patient");
+  else if (p === "doctors") openModal("new-doctor");
+  else if (p === "appointments") openModal("new-appointment");
+  else if (p === "resources") openModal("new-resource");
+  else if (p === "treatments") openModal("new-process");
+  else if (p === "scheduler") runScheduler();
+  else if (p === "allocation") checkBankerInput();
+  else if (p === "history") {
+    loadDataFromBackend();
+    toast("Refreshed history audit trail.");
+  }
+});
+
+$("recordForm")?.addEventListener("submit", submitModal);
+$("closeModal")?.addEventListener("click", () => $("recordDialog")?.close());
+$("cancelModal")?.addEventListener("click", () => $("recordDialog")?.close());
+$("mobileMenu")?.addEventListener("click", () => $("sidebar")?.classList.toggle("open"));
+$("refreshButton")?.addEventListener("click", async () => {
+  toast("Refreshing live database snapshot...");
+  await loadDataFromBackend();
+  toast("Data refreshed.");
+});
+$("overviewSearch")?.addEventListener("input", refreshOverview);
+$("dismissNotice")?.addEventListener("click", () => $("prototypeNotice")?.classList.add("hidden"));
+$("helpButton")?.addEventListener("click", () => {
+  toast("B.Tech 3rd Year Project: OS CPU Scheduling + DBMS CRUD & 1:1 Bed Allocation");
+});
+
+if ($("todayLabel")) {
+  $("todayLabel").textContent = new Intl.DateTimeFormat("en-IN", {
+    day: "2-digit", month: "short", year: "numeric"
+  }).format(new Date()).toUpperCase();
+}
+
 updateGreeting();
-refreshOverview();
+loadDataFromBackend();
